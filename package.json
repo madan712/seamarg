@@ -1,0 +1,24 @@
+{
+  "name": "seamarg",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Root workspace for the seamarg backend, frontend, lambda, and infrastructure projects.",
+  "workspaces": [
+    "frontend",
+    "lambda"
+  ],
+  "scripts": {
+    "backend:bootRun": "./gradlew :backend:bootRun",
+    "backend:build": "./gradlew :backend:bootJar",
+    "backend:test": "./gradlew :backend:test",
+    "build": "npm run build --workspaces --if-present",
+    "frontend:dev": "npm run dev -w frontend",
+    "frontend:build": "npm run build -w frontend",
+    "lambda:build": "npm run build -w lambda",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

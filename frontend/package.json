@@ -1,0 +1,23 @@
+{
+  "name": "@seamarg/frontend",
+  "version": "0.0.1",
+  "description": "TypeScript frontend for seamarg.",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "npm run typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "keywords": [
+    "seamarg"
+  ],
+  "license": "UNLICENSED",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}
