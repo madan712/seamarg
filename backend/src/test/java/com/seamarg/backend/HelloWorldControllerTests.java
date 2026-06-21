@@ -10,6 +10,6 @@ class HelloWorldControllerTests {
 	void helloReturnsGreeting() {
 		HelloWorldController controller = new HelloWorldController();
 
-		assertEquals("Hello from seamarg backend", controller.hello().message());
+		assertEquals("Hello message from seamarg backend", controller.hello().message());
 	}
 }
