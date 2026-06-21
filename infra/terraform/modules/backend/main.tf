@@ -302,6 +302,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     effect = "Allow"
     actions = [
       "autoscaling:*",
+      "cloudfront:*",
       "cloudformation:*",
       "ec2:*",
       "ecr:*",
@@ -309,6 +310,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "elasticloadbalancing:*",
       "iam:*",
       "logs:*",
+      "s3:*",
       "sts:GetCallerIdentity"
     ]
     resources = ["*"]

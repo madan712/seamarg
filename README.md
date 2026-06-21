@@ -5,7 +5,7 @@
 - `backend` is a Spring Boot Java service managed by Gradle.
 - `frontend` is a TypeScript/Vite web app.
 - `lambda` is a TypeScript AWS Lambda placeholder for future functions.
-- `infra/terraform` contains infrastructure-as-code scaffolding.
+- `infra/terraform` contains infrastructure-as-code for EKS, ECR, S3, CloudFront, and future Lambda infrastructure.
 - `.github/workflows` contains CI and manually unlocked deployment workflows.
 
 ## Local development
@@ -63,4 +63,6 @@ The workflow has an `unlock_deploy` checkbox and a `target` selector:
 
 The workflow builds each selected component separately and then calls the matching script in `scripts/`. Backend deployment builds a Docker image, pushes it to ECR, and rolls it out to EKS.
 
-Backend deployment to AWS EKS is ready to configure. See `docs/aws-eks-backend-deployment.md`.
+Backend deployment builds a Docker image, pushes it to ECR, and rolls it out to EKS. Frontend deployment builds the Vite static files, uploads them to a private S3 bucket, and invalidates the CloudFront distribution that is allowed to read that bucket.
+
+Backend deployment to AWS EKS is documented in `docs/aws-eks-backend-deployment.md`.

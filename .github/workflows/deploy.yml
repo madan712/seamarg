@@ -173,9 +173,48 @@ jobs:
     if: ${{ always() && needs.guard.outputs.unlocked == 'true' && (needs.guard.outputs.target == 'frontend' || needs.guard.outputs.target == 'all') && (needs.terraform.result == 'success' || needs.terraform.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment: ${{ needs.guard.outputs.environment }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate AWS deployment variables
+        run: |
+          test -n "${{ vars.AWS_ROLE_TO_ASSUME }}" || { echo "Set AWS_ROLE_TO_ASSUME as a GitHub Environment or repository variable."; exit 1; }
+          test -n "$TF_STATE_BUCKET" || { echo "Set TF_STATE_BUCKET as a GitHub Environment or repository variable."; exit 1; }
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          role-session-name: seamarg-frontend-${{ github.run_id }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Initialize Terraform outputs
+        run: terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} init -backend-config="bucket=${TF_STATE_BUCKET}" -backend-config="key=seamarg/${{ needs.guard.outputs.environment }}/terraform.tfstate" -backend-config="region=${AWS_REGION}"
+
+      - name: Read frontend infrastructure outputs
+        id: frontend_infra
+        run: |
+          output_error="$(mktemp)"
+          if ! bucket_name="$(terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} output -raw frontend_bucket_name 2>"$output_error")"; then
+            cat "$output_error"
+            echo "Frontend infrastructure outputs are missing. Re-run this workflow with terraform_apply checked for ${{ needs.guard.outputs.environment }} first." >&2
+            exit 1
+          fi
+          cloudfront_distribution_id="$(terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} output -raw frontend_cloudfront_distribution_id)"
+          cloudfront_domain_name="$(terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} output -raw frontend_cloudfront_domain_name)"
+
+          echo "bucket_name=${bucket_name}" >> "$GITHUB_OUTPUT"
+          echo "cloudfront_distribution_id=${cloudfront_distribution_id}" >> "$GITHUB_OUTPUT"
+          echo "cloudfront_domain_name=${cloudfront_domain_name}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -190,7 +229,7 @@ jobs:
         run: npm run build -w frontend
 
       - name: Deploy frontend
-        run: ./scripts/deploy-frontend.sh "${{ needs.guard.outputs.environment }}"
+        run: ./scripts/deploy-frontend.sh "${{ needs.guard.outputs.environment }}" "frontend/dist" "${{ steps.frontend_infra.outputs.bucket_name }}" "${{ steps.frontend_infra.outputs.cloudfront_distribution_id }}" "${{ steps.frontend_infra.outputs.cloudfront_domain_name }}"
 
   deploy-lambda:
     name: Deploy Lambda

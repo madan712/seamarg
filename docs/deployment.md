@@ -12,3 +12,24 @@ Manual inputs:
 Use GitHub Environment protection rules for approvals before production deployments.
 
 Backend deployment to AWS EKS is documented in `docs/aws-eks-backend-deployment.md`.
+
+## Frontend Deployment
+
+The frontend is hosted as static files in a private S3 bucket. CloudFront uses Origin Access Control to read from the bucket, and direct public S3 access is blocked.
+
+For the first frontend deployment in an environment:
+
+1. Open GitHub Actions.
+2. Run the `Deploy` workflow.
+3. Select `environment`, such as `dev`.
+4. Select `target` as `frontend` or `all`.
+5. Check `unlock_deploy`.
+6. Check `terraform_apply`.
+
+Terraform creates the frontend bucket and CloudFront distribution, then the pipeline builds `frontend/dist`, syncs it to S3, and creates a CloudFront invalidation. Later frontend-only deploys can leave `terraform_apply` unchecked unless infrastructure changed.
+
+Required GitHub Environment or repository variables:
+
+- `AWS_REGION`, for example `ap-south-1`.
+- `TF_STATE_BUCKET`, for example `seamarg-terraform-state-695663959248-ap-south-1`.
+- `AWS_ROLE_TO_ASSUME`, the GitHub Actions IAM role ARN from Terraform output.
