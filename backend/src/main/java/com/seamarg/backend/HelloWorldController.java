@@ -10,7 +10,7 @@ public class HelloWorldController {
 
 	@GetMapping("/hello")
 	public HelloResponse hello() {
-		return new HelloResponse("Hello from seamarg backend");
+		return new HelloResponse("Hello message from seamarg backend");
 	}
 
 	public record HelloResponse(String message) {
