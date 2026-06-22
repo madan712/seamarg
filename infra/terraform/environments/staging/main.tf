@@ -15,10 +15,6 @@ module "frontend" {
 
   project_name = var.project_name
   environment  = var.environment
-
-  depends_on = [
-    module.backend
-  ]
 }
 
 module "auth" {
@@ -29,10 +25,6 @@ module "auth" {
   aws_region                      = var.aws_region
   frontend_cloudfront_domain_name = module.frontend.cloudfront_domain_name
   include_localhost_callback_urls = var.environment != "prod"
-
-  depends_on = [
-    module.frontend
-  ]
 }
 
 module "lambda" {
