@@ -11,6 +11,8 @@ This repository is a monorepo. Import the root directory into IntelliJ as the Gr
 - `k8s/backend/`: Kubernetes manifests for the backend EKS deployment.
 - `.github/workflows/`: CI and manually triggered deployment workflows.
 
+For project history, deployed resource names, security decisions, and known deployment lessons, read `docs/project-context.md` before making infrastructure, security, or pipeline changes.
+
 ## Build, Test, and Development Commands
 
 - `./gradlew :backend:bootRun`: run the backend locally on port `8080`.
