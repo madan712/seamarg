@@ -10,7 +10,7 @@ variable "environment" {
 }
 
 variable "force_destroy_bucket" {
-  description = "Allow Terraform to delete the frontend bucket even when it contains objects."
+  description = "Allow Terraform to empty the frontend bucket during deletion. The bucket resource still has prevent_destroy enabled."
   type        = bool
   default     = false
 }

@@ -28,6 +28,8 @@ For the first frontend deployment in an environment:
 
 Terraform creates the frontend bucket and CloudFront distribution, then the pipeline builds `frontend/dist`, syncs it to S3, and creates a CloudFront invalidation. Later frontend-only deploys can leave `terraform_apply` unchecked unless infrastructure changed.
 
+The frontend S3 bucket has Terraform `prevent_destroy` enabled because it stores deployed static files. If a Terraform plan wants to delete or replace this bucket, stop and check that the selected GitHub Environment and `AWS_REGION` match the environment where the bucket was originally created.
+
 Required GitHub Environment or repository variables:
 
 - `AWS_REGION`, for example `ap-south-1`.

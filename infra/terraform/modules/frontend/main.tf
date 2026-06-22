@@ -23,6 +23,10 @@ resource "aws_s3_bucket" "frontend" {
   bucket        = local.bucket_name
   force_destroy = var.force_destroy_bucket
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   tags = merge(local.common_tags, {
     Name = local.bucket_name
   })
