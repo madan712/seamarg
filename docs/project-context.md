@@ -4,6 +4,12 @@ This file preserves the current state of the `seamarg` project for future contri
 
 At the end of long Codex sessions, use `docs/session-close-prompt.md` to update this file with any new durable project context.
 
+## Context Maintenance
+
+`AGENTS.md` directs future contributors and Codex chats to read this file before making infrastructure, security, or pipeline changes. Use `docs/session-close-prompt.md` before closing long sessions so new architecture decisions, AWS resource names, deployment lessons, and known risks are preserved here.
+
+Do not commit or push during a context-save pass unless the user explicitly asks for it.
+
 ## Current Architecture
 
 `seamarg` is a monorepo intended to be imported into IntelliJ from the repository root.
