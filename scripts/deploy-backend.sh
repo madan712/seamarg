@@ -4,7 +4,7 @@ set -euo pipefail
 environment="${1:?Usage: deploy-backend.sh <environment> <image-uri>}"
 image_uri="${2:?Usage: deploy-backend.sh <environment> <image-uri>}"
 
-aws_region="${AWS_REGION:-eu-west-2}"
+aws_region="${AWS_REGION:-ap-south-1}"
 cluster_name="${EKS_CLUSTER_NAME:-seamarg-${environment}-eks}"
 namespace="${KUBE_NAMESPACE:-seamarg}"
 

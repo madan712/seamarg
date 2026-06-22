@@ -17,7 +17,7 @@ This setup creates paid AWS resources, including EKS, EC2 nodes, ECR storage, an
 Create this once in your AWS account. Replace the bucket name with a globally unique value.
 
 ```bash
-export AWS_REGION=eu-west-2
+export AWS_REGION=ap-south-1
 export TF_STATE_BUCKET=seamarg-terraform-state-<your-suffix>
 
 aws s3api create-bucket \
@@ -73,7 +73,7 @@ In your GitHub repository, create an Environment named `dev`.
 
 Add these GitHub Environment variables:
 
-- `AWS_REGION`: `eu-west-2`
+- `AWS_REGION`: `ap-south-1`
 - `AWS_ROLE_TO_ASSUME`: output from `github_actions_role_arn`
 - `TF_STATE_BUCKET`: your Terraform state bucket
 

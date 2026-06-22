@@ -13,7 +13,7 @@ variable "environment" {
 variable "aws_region" {
   description = "AWS region for the environment."
   type        = string
-  default     = "eu-west-2"
+  default     = "ap-south-1"
 }
 
 variable "github_repository_full_name" {
