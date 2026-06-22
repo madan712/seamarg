@@ -82,3 +82,13 @@ output "cognito_logout_urls" {
   description = "Logout URLs registered with the Cognito frontend app client."
   value       = module.auth.logout_urls
 }
+
+output "backend_kubernetes_namespace" {
+  description = "Kubernetes namespace managed for the backend."
+  value       = module.backend_config.namespace
+}
+
+output "backend_config_map_name" {
+  description = "Kubernetes ConfigMap containing non-secret backend runtime configuration."
+  value       = module.backend_config.config_map_name
+}

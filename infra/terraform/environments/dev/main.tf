@@ -31,6 +31,21 @@ module "auth" {
   ]
 }
 
+module "backend_config" {
+  source = "../../modules/backend-config"
+
+  project_name       = var.project_name
+  environment        = var.environment
+  cognito_issuer_uri = module.auth.issuer_uri
+  admin_username     = var.backend_admin_username
+  admin_role         = var.backend_admin_role
+
+  depends_on = [
+    module.backend,
+    module.auth
+  ]
+}
+
 module "lambda" {
   source      = "../../modules/lambda"
   environment = var.environment
