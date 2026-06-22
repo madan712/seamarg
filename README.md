@@ -50,6 +50,116 @@ terraform -chdir=infra/terraform/environments/dev init -backend=false
 terraform -chdir=infra/terraform/environments/dev validate
 ```
 
+## Customer endpoint token for local testing
+
+Customer endpoints under `/api/customer/**` require a Cognito JWT bearer token. A `401 Unauthorized` response from `http://localhost:8080/api/customer/hello` is expected until the request includes a valid token.
+
+### Start the backend with the Cognito issuer
+
+The backend validates customer tokens against `COGNITO_ISSUER_URI`.
+
+To get the dev issuer:
+
+```bash
+terraform -chdir=infra/terraform/environments/dev output -raw cognito_issuer_uri
+```
+
+If starting from IntelliJ, open `Run > Edit Configurations...`, select the backend `BackendApplication` run configuration, and add this environment variable:
+
+```text
+COGNITO_ISSUER_URI=<paste-cognito-issuer-uri-here>
+```
+
+If starting from the terminal:
+
+```bash
+export COGNITO_ISSUER_URI="$(terraform -chdir=infra/terraform/environments/dev output -raw cognito_issuer_uri)"
+./gradlew :backend:bootRun
+```
+
+Then confirm the backend is running:
+
+```bash
+curl -i http://localhost:8080/api/public/hello
+```
+
+### Generate a customer token
+
+Get the Cognito Hosted UI URL and app client ID:
+
+```bash
+export HOSTED_UI="$(terraform -chdir=infra/terraform/environments/dev output -raw cognito_hosted_ui_base_url)"
+export CLIENT_ID="$(terraform -chdir=infra/terraform/environments/dev output -raw cognito_app_client_id)"
+```
+
+Open the Cognito login page:
+
+```bash
+open "${HOSTED_UI}/oauth2/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=http%3A%2F%2Flocalhost%3A5173&scope=openid+email+profile"
+```
+
+Sign in or sign up. Cognito redirects to a URL like:
+
+```text
+http://localhost:5173/?code=abc123&state=...
+```
+
+Copy only the value after `code=` and before any `&state`. Then exchange it for tokens immediately:
+
+```bash
+export CODE="paste-code-here"
+
+curl -s -X POST "${HOSTED_UI}/oauth2/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=authorization_code" \
+  --data-urlencode "client_id=${CLIENT_ID}" \
+  --data-urlencode "code=${CODE}" \
+  --data-urlencode "redirect_uri=http://localhost:5173"
+```
+
+The response includes `access_token`, `id_token`, `refresh_token`, and `expires_in`. Use the `access_token` for backend API calls.
+
+If Cognito returns `{"error":"invalid_grant"}`, get a fresh authorization code and try again. Authorization codes are short-lived, can only be used once, and must be exchanged with the exact same redirect URI: `http://localhost:5173`.
+
+### Call the customer endpoint
+
+Using curl:
+
+```bash
+export TOKEN="paste-access-token-here"
+
+curl -i -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/customer/hello
+```
+
+Using Postman:
+
+- Method: `GET`
+- URL: `http://localhost:8080/api/customer/hello`
+- Authorization type: `Bearer Token`
+- Token: paste the `access_token`
+
+The response should look like:
+
+```json
+{
+  "message": "Hello from the customer API",
+  "subject": "customer-user-id"
+}
+```
+
+You do not need a new token for every request. Reuse the same `access_token` until it expires. To get a new access token without signing in again, use the `refresh_token` from the first token response:
+
+```bash
+export REFRESH_TOKEN="paste-refresh-token-here"
+
+curl -s -X POST "${HOSTED_UI}/oauth2/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=refresh_token" \
+  --data-urlencode "client_id=${CLIENT_ID}" \
+  --data-urlencode "refresh_token=${REFRESH_TOKEN}"
+```
+
 ## Admin endpoint credentials
 
 Admin endpoints use a static password header for now. The username and role are internal Spring Security values used as the authenticated principal and authority after the password is accepted.
