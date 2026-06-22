@@ -52,6 +52,12 @@ Admin credentials are configured through environment variables:
 
 On EKS, `SEAMARG_ADMIN_PASSWORD` comes from Kubernetes secret `seamarg-backend-secrets`, key `admin-password`. Terraform manages the backend namespace `seamarg` and non-secret config map `seamarg-backend-config`, including `admin-username`, `admin-role`, and `cognito-issuer-uri`.
 
+The known dev Cognito issuer is `https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_7B41ZYOET`. Confirm it from Terraform before relying on it:
+
+```bash
+terraform -chdir=infra/terraform/environments/dev output -raw cognito_issuer_uri
+```
+
 Useful backend checks:
 
 ```bash
@@ -64,6 +70,13 @@ The dev EKS cluster is named `seamarg-dev-eks`, and the backend Kubernetes names
 
 ```bash
 export BACKEND_URL="http://$(kubectl -n seamarg get service seamarg-backend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
+```
+
+If a Cognito access token works locally but returns unauthorized on EKS, compare these three values: the token `iss` claim, Terraform output `cognito_issuer_uri`, and the pod environment value:
+
+```bash
+kubectl -n seamarg get configmap seamarg-backend-config -o jsonpath='{.data.cognito-issuer-uri}{"\n"}'
+kubectl -n seamarg exec deployment/seamarg-backend -- sh -c 'printf "%s\n" "$COGNITO_ISSUER_URI"'
 ```
 
 ## Frontend Status
@@ -94,5 +107,12 @@ Native Cognito email sign-up is the current baseline. Google/Gmail social login 
 - Creating Cognito required adding `cognito-idp:*` permissions to the GitHub Actions role.
 - A broad Terraform `depends_on` between modules caused Terraform to think the frontend bucket needed replacement. Avoid broad module-level dependencies unless truly required.
 - Selecting `target: backend` while expecting Terraform infra changes will not apply infrastructure correctly. Use `target: infra` for Terraform.
-- A Cognito token that worked locally failed on EKS because `seamarg-backend-config` was missing, so the server pod had an empty `COGNITO_ISSUER_URI`. Terraform now owns this ConfigMap; import existing manual namespace/configmap resources once before applying in dev.
+- A Cognito token that worked locally failed on EKS because `seamarg-backend-config` was missing, so the server pod had an empty `COGNITO_ISSUER_URI`. Manually creating the ConfigMap with `cognito-issuer-uri` fixed the running server. Terraform now owns this ConfigMap; import existing manual namespace/configmap resources once before applying in dev:
+
+```bash
+terraform -chdir=infra/terraform/environments/dev import module.backend_config.kubernetes_namespace_v1.backend seamarg
+terraform -chdir=infra/terraform/environments/dev import module.backend_config.kubernetes_config_map_v1.backend_config seamarg/seamarg-backend-config
+```
+
+- Local Terraform validation may fail with `ExpiredToken` if the AWS CLI session has expired. Refresh AWS credentials, verify with `aws sts get-caller-identity`, then rerun `terraform init`/`validate`.
 - Never store admin passwords, AWS access keys, kubeconfigs, or Terraform state in the repository.
