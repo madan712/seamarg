@@ -25,9 +25,15 @@ public class AdminPasswordAuthenticationFilter extends OncePerRequestFilter {
 	public static final String ADMIN_PASSWORD_HEADER = "X-Admin-Password";
 
 	private final String adminPassword;
+	private final String adminUsername;
+	private final String adminAuthority;
 
-	public AdminPasswordAuthenticationFilter(@Value("${seamarg.security.admin.password:}") String adminPassword) {
+	public AdminPasswordAuthenticationFilter(@Value("${seamarg.security.admin.password:}") String adminPassword,
+			@Value("${seamarg.security.admin.username:admin}") String adminUsername,
+			@Value("${seamarg.security.admin.role:ADMIN}") String adminRole) {
 		this.adminPassword = adminPassword;
+		this.adminUsername = AdminSecurityProperties.usernameOrDefault(adminUsername);
+		this.adminAuthority = AdminSecurityProperties.authorityFromRole(adminRole);
 	}
 
 	@Override
@@ -51,8 +57,8 @@ public class AdminPasswordAuthenticationFilter extends OncePerRequestFilter {
 			return;
 		}
 
-		var authentication = new UsernamePasswordAuthenticationToken("admin", null,
-				List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+		var authentication = new UsernamePasswordAuthenticationToken(adminUsername, null,
+				List.of(new SimpleGrantedAuthority(adminAuthority)));
 		var context = SecurityContextHolder.createEmptyContext();
 		context.setAuthentication(authentication);
 		SecurityContextHolder.setContext(context);

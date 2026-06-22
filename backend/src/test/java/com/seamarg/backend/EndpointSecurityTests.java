@@ -13,7 +13,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest(properties = "seamarg.security.admin.password=test-admin-password")
+@SpringBootTest(properties = {
+		"seamarg.security.admin.username=test-admin",
+		"seamarg.security.admin.password=test-admin-password",
+		"seamarg.security.admin.role=SEAMARG_ADMIN"
+})
 @AutoConfigureMockMvc
 class EndpointSecurityTests {
 
@@ -57,6 +61,6 @@ class EndpointSecurityTests {
 			.header(AdminPasswordAuthenticationFilter.ADMIN_PASSWORD_HEADER, "test-admin-password"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.message").value("Hello from the admin API"))
-			.andExpect(jsonPath("$.principal").value("admin"));
+			.andExpect(jsonPath("$.principal").value("test-admin"));
 	}
 }

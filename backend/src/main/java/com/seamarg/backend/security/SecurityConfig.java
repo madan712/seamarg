@@ -20,14 +20,16 @@ import org.springframework.util.StringUtils;
 public class SecurityConfig {
 
 	@Bean
-	SecurityFilterChain securityFilterChain(HttpSecurity http, AdminPasswordAuthenticationFilter adminPasswordFilter)
-			throws Exception {
+	SecurityFilterChain securityFilterChain(HttpSecurity http, AdminPasswordAuthenticationFilter adminPasswordFilter,
+			@Value("${seamarg.security.admin.role:ADMIN}") String adminRole) throws Exception {
+		var adminAuthority = AdminSecurityProperties.authorityFromRole(adminRole);
+
 		return http.csrf(AbstractHttpConfigurer::disable)
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests(authorize -> authorize
 				.requestMatchers("/api/public/**", "/api/hello", "/actuator/health/**", "/actuator/info").permitAll()
 				.requestMatchers("/api/customer/**").authenticated()
-				.requestMatchers("/api/admin/**").hasRole("ADMIN")
+				.requestMatchers("/api/admin/**").hasAuthority(adminAuthority)
 				.anyRequest().denyAll())
 			.oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
 			.addFilterBefore(adminPasswordFilter, AuthorizationFilter.class)

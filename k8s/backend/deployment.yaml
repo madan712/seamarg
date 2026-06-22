@@ -23,11 +23,23 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            - name: SEAMARG_ADMIN_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: seamarg-backend-config
+                  key: admin-username
+                  optional: true
             - name: SEAMARG_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: seamarg-backend-secrets
                   key: admin-password
+                  optional: true
+            - name: SEAMARG_ADMIN_ROLE
+              valueFrom:
+                configMapKeyRef:
+                  name: seamarg-backend-config
+                  key: admin-role
                   optional: true
             - name: COGNITO_ISSUER_URI
               valueFrom:
