@@ -5,7 +5,7 @@ GitHub Actions deploys components through `.github/workflows/deploy.yml`.
 Manual inputs:
 
 - `unlock_deploy`: must be checked before any deploy job runs.
-- `target`: choose `backend`, `frontend`, `lambda`, or `all`.
+- `target`: choose `backend`, `frontend`, `lambda`, `infra`, or `all`.
 - `environment`: choose the GitHub Environment name.
 - `terraform_apply`: optionally apply Terraform before deploying.
 
@@ -33,3 +33,21 @@ Required GitHub Environment or repository variables:
 - `AWS_REGION`, for example `ap-south-1`.
 - `TF_STATE_BUCKET`, for example `seamarg-terraform-state-695663959248-ap-south-1`.
 - `AWS_ROLE_TO_ASSUME`, the GitHub Actions IAM role ARN from Terraform output.
+
+## Cognito Auth Infrastructure
+
+Terraform creates a Cognito user pool for customer authentication, a browser-safe frontend app client, and a hosted UI domain. The frontend CloudFront URL is registered as a callback and logout URL. Non-prod environments also register `http://localhost:5173` for local frontend development.
+
+To create or update only infrastructure, run the `Deploy` workflow with:
+
+- `target`: `infra`
+- `unlock_deploy`: checked
+- `terraform_apply`: checked
+
+After Terraform completes, read the backend issuer value:
+
+```bash
+terraform -chdir=infra/terraform/environments/dev output -raw cognito_issuer_uri
+```
+
+Set that value in the backend Kubernetes ConfigMap as `COGNITO_ISSUER_URI`.

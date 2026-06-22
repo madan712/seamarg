@@ -304,6 +304,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "autoscaling:*",
       "cloudfront:*",
       "cloudformation:*",
+      "cognito-idp:*",
       "ec2:*",
       "ecr:*",
       "eks:*",

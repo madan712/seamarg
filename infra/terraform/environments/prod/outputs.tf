@@ -42,3 +42,43 @@ output "frontend_cloudfront_hosted_zone_id" {
   description = "CloudFront hosted zone ID for a future Route 53 alias record."
   value       = module.frontend.cloudfront_hosted_zone_id
 }
+
+output "cognito_user_pool_id" {
+  description = "Cognito user pool ID for customer authentication."
+  value       = module.auth.user_pool_id
+}
+
+output "cognito_user_pool_arn" {
+  description = "Cognito user pool ARN for customer authentication."
+  value       = module.auth.user_pool_arn
+}
+
+output "cognito_app_client_id" {
+  description = "Cognito frontend app client ID."
+  value       = module.auth.app_client_id
+}
+
+output "cognito_issuer_uri" {
+  description = "Issuer URI to set as COGNITO_ISSUER_URI in the backend."
+  value       = module.auth.issuer_uri
+}
+
+output "cognito_jwks_uri" {
+  description = "JWKS URI used by JWT validators."
+  value       = module.auth.jwks_uri
+}
+
+output "cognito_hosted_ui_base_url" {
+  description = "Cognito hosted UI base URL."
+  value       = module.auth.hosted_ui_base_url
+}
+
+output "cognito_callback_urls" {
+  description = "Callback URLs registered with the Cognito frontend app client."
+  value       = module.auth.callback_urls
+}
+
+output "cognito_logout_urls" {
+  description = "Logout URLs registered with the Cognito frontend app client."
+  value       = module.auth.logout_urls
+}

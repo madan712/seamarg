@@ -17,6 +17,7 @@ on:
           - backend
           - frontend
           - lambda
+          - infra
           - all
       environment:
         description: GitHub Environment to deploy to.
