@@ -172,6 +172,33 @@ Defaults:
 
 ### Server setup on EKS
 
+Terraform manages the backend namespace and non-secret ConfigMap:
+
+- Namespace: `seamarg`
+- ConfigMap: `seamarg-backend-config`
+- Keys: `admin-username`, `admin-role`, `cognito-issuer-uri`
+
+Do not manually create or patch `seamarg-backend-config` during normal setup. The Cognito issuer comes from the Terraform-created Cognito user pool, and the username/role come from Terraform variables `backend_admin_username` and `backend_admin_role`.
+
+For the existing dev cluster, if the namespace or ConfigMap was created manually before this Terraform code was added, import them into Terraform state once:
+
+```bash
+terraform -chdir=infra/terraform/environments/dev import \
+  module.backend_config.kubernetes_namespace_v1.backend seamarg
+
+terraform -chdir=infra/terraform/environments/dev import \
+  module.backend_config.kubernetes_config_map_v1.backend_config seamarg/seamarg-backend-config
+```
+
+Then apply infrastructure through the GitHub Actions workflow:
+
+```text
+target: infra
+environment: dev
+unlock_deploy: checked
+terraform_apply: checked
+```
+
 Create or rotate the admin password:
 
 ```bash
@@ -183,25 +210,7 @@ kubectl -n seamarg create secret generic seamarg-backend-secrets \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-Create the admin username and role if the config map does not exist yet:
-
-```bash
-export ADMIN_USERNAME="admin"
-export ADMIN_ROLE="ADMIN"
-
-kubectl -n seamarg create configmap seamarg-backend-config \
-  --from-literal=admin-username="$ADMIN_USERNAME" \
-  --from-literal=admin-role="$ADMIN_ROLE"
-```
-
-If `seamarg-backend-config` already exists, patch it so existing keys such as `cognito-issuer-uri` are preserved:
-
-```bash
-kubectl -n seamarg patch configmap seamarg-backend-config --type merge \
-  -p "{\"data\":{\"admin-username\":\"${ADMIN_USERNAME}\",\"admin-role\":\"${ADMIN_ROLE}\"}}"
-```
-
-Restart the backend after any username, password, or role change:
+Restart the backend after any username, password, role, or Cognito issuer change:
 
 ```bash
 kubectl -n seamarg rollout restart deployment/seamarg-backend

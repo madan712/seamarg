@@ -29,8 +29,8 @@ resource "kubernetes_config_map_v1" "backend_config" {
   }
 
   data = {
-    admin-username    = var.admin_username
-    admin-role        = var.admin_role
+    admin-username     = var.admin_username
+    admin-role         = var.admin_role
     cognito-issuer-uri = var.cognito_issuer_uri
   }
 }

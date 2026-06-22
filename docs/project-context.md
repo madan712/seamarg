@@ -50,7 +50,7 @@ Admin credentials are configured through environment variables:
 - `SEAMARG_ADMIN_PASSWORD`, no default password
 - `SEAMARG_ADMIN_ROLE`, default `ADMIN`, mapped to Spring authority `ROLE_ADMIN`
 
-On EKS, `SEAMARG_ADMIN_PASSWORD` comes from Kubernetes secret `seamarg-backend-secrets`, key `admin-password`. Username, role, and Cognito issuer URI come from config map `seamarg-backend-config`.
+On EKS, `SEAMARG_ADMIN_PASSWORD` comes from Kubernetes secret `seamarg-backend-secrets`, key `admin-password`. Terraform manages the backend namespace `seamarg` and non-secret config map `seamarg-backend-config`, including `admin-username`, `admin-role`, and `cognito-issuer-uri`.
 
 Useful backend checks:
 
@@ -94,4 +94,5 @@ Native Cognito email sign-up is the current baseline. Google/Gmail social login 
 - Creating Cognito required adding `cognito-idp:*` permissions to the GitHub Actions role.
 - A broad Terraform `depends_on` between modules caused Terraform to think the frontend bucket needed replacement. Avoid broad module-level dependencies unless truly required.
 - Selecting `target: backend` while expecting Terraform infra changes will not apply infrastructure correctly. Use `target: infra` for Terraform.
+- A Cognito token that worked locally failed on EKS because `seamarg-backend-config` was missing, so the server pod had an empty `COGNITO_ISSUER_URI`. Terraform now owns this ConfigMap; import existing manual namespace/configmap resources once before applying in dev.
 - Never store admin passwords, AWS access keys, kubeconfigs, or Terraform state in the repository.
