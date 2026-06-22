@@ -25,6 +25,10 @@ module "auth" {
   aws_region                      = var.aws_region
   frontend_cloudfront_domain_name = module.frontend.cloudfront_domain_name
   include_localhost_callback_urls = var.environment != "prod"
+
+  depends_on = [
+    module.backend
+  ]
 }
 
 module "lambda" {
