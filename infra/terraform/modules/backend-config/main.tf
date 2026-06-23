@@ -4,6 +4,7 @@ locals {
     "app.kubernetes.io/part-of"    = var.project_name
     "app.kubernetes.io/managed-by" = "terraform"
     "seamarg.io/environment"       = var.environment
+    "seamarg.io/cost-center"       = var.project_name
   }
 
   backend_labels = {
@@ -11,6 +12,7 @@ locals {
     "app.kubernetes.io/part-of"    = var.project_name
     "app.kubernetes.io/managed-by" = "terraform"
     "seamarg.io/environment"       = var.environment
+    "seamarg.io/cost-center"       = var.project_name
   }
 }
 

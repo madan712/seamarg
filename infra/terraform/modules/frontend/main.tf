@@ -7,6 +7,7 @@ locals {
     {
       Project     = var.project_name
       Environment = var.environment
+      CostCenter  = var.project_name
       ManagedBy   = "terraform"
       Component   = "frontend"
     },

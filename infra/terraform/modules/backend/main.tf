@@ -6,6 +6,7 @@ locals {
     {
       Project     = var.project_name
       Environment = var.environment
+      CostCenter  = var.project_name
       ManagedBy   = "terraform"
     },
     var.tags
@@ -114,6 +115,36 @@ resource "aws_ecr_lifecycle_policy" "backend" {
   })
 }
 
+resource "aws_launch_template" "eks_node_group" {
+  name_prefix = "${local.cluster_name}-default-"
+  description = "Launch template for ${local.cluster_name} managed nodes"
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(local.common_tags, {
+      Name = "${local.cluster_name}-default-node"
+    })
+  }
+
+  tag_specifications {
+    resource_type = "volume"
+    tags = merge(local.common_tags, {
+      Name = "${local.cluster_name}-default-node"
+    })
+  }
+
+  tag_specifications {
+    resource_type = "network-interface"
+    tags = merge(local.common_tags, {
+      Name = "${local.cluster_name}-default-node"
+    })
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.cluster_name}-default"
+  })
+}
+
 data "aws_iam_policy_document" "eks_cluster_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -197,11 +228,13 @@ resource "aws_eks_cluster" "this" {
 resource "aws_eks_addon" "vpc_cni" {
   cluster_name = aws_eks_cluster.this.name
   addon_name   = "vpc-cni"
+  tags         = local.common_tags
 }
 
 resource "aws_eks_addon" "kube_proxy" {
   cluster_name = aws_eks_cluster.this.name
   addon_name   = "kube-proxy"
+  tags         = local.common_tags
 }
 
 resource "aws_eks_node_group" "default" {
@@ -210,6 +243,11 @@ resource "aws_eks_node_group" "default" {
   node_role_arn   = aws_iam_role.eks_node.arn
   subnet_ids      = aws_subnet.public[*].id
   instance_types  = var.node_instance_types
+
+  launch_template {
+    id      = aws_launch_template.eks_node_group.id
+    version = aws_launch_template.eks_node_group.latest_version
+  }
 
   scaling_config {
     desired_size = var.node_desired_size
@@ -237,6 +275,7 @@ resource "aws_eks_node_group" "default" {
 resource "aws_eks_addon" "coredns" {
   cluster_name = aws_eks_cluster.this.name
   addon_name   = "coredns"
+  tags         = local.common_tags
 
   depends_on = [
     aws_eks_node_group.default
@@ -332,6 +371,7 @@ resource "aws_eks_access_entry" "github_actions" {
   cluster_name  = aws_eks_cluster.this.name
   principal_arn = aws_iam_role.github_actions[0].arn
   type          = "STANDARD"
+  tags          = local.common_tags
 }
 
 resource "aws_eks_access_policy_association" "github_actions_admin" {

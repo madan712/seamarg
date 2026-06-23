@@ -3,9 +3,10 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project   = var.project_name
-      ManagedBy = "terraform"
-      Scope     = "github-oidc-bootstrap"
+      Project    = var.project_name
+      CostCenter = var.project_name
+      ManagedBy  = "terraform"
+      Scope      = "github-oidc-bootstrap"
     }
   }
 }
