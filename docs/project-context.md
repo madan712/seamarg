@@ -28,7 +28,7 @@ Infrastructure is now managed only through the dev Terraform stack under `infra/
 
 Backend EKS deployment was retired on June 24, 2026 because infrastructure cost was too high for the expected initial traffic. The replacement is one Dockerized backend instance on a manually provided EC2 host. Terraform no longer contains EKS, ECR, or Kubernetes backend config modules.
 
-GitHub Actions deploys through OIDC using IAM role `arn:aws:iam::695663959248:role/seamarg-dev-github-actions`. Terraform manages that role through `infra/terraform/modules/github-actions`; permissions are scoped to S3, IAM, Cognito, CloudFront, and `sts:GetCallerIdentity` for the current dev infrastructure. The workflow is manually unlocked with:
+GitHub Actions deploys through OIDC using IAM role `arn:aws:iam::695663959248:role/seamarg-dev-github-actions`. Terraform manages that role through `infra/terraform/modules/github-actions`; permissions are scoped to S3, IAM, Cognito, CloudFront, EC2 security-group ingress for backend SSH deploys, and `sts:GetCallerIdentity` for the current dev infrastructure. The workflow is manually unlocked with:
 
 - `environment`: usually `dev`
 - `target`: `backend`, `frontend`, `lambda`, `infra`, or `all`
@@ -55,7 +55,9 @@ On EC2, provide these environment variables to the backend Docker container dire
 
 The current dev backend EC2 host is `ec2-13-127-32-60.ap-south-1.compute.amazonaws.com`, connecting as `ec2-user` with the local key at `/Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem`. It runs Amazon Linux 2023 with Docker enabled. The backend container is named `seamarg-backend`, uses image `seamarg-backend:latest`, maps host port `80` to container port `8080`, and uses restart policy `unless-stopped`. Runtime environment variables live on the server at `/opt/seamarg/backend.env` with `600` permissions and must not be committed or printed.
 
-GitHub Actions backend deployment requires the `BACKEND_EC2_SSH_PRIVATE_KEY` GitHub Environment secret. Optional variables are `BACKEND_EC2_HOST`, `BACKEND_EC2_USER`, and `BACKEND_EC2_REMOTE_ROOT`; defaults match the current dev host.
+GitHub Actions backend deployment requires the `BACKEND_EC2_SSH_PRIVATE_KEY` GitHub Environment secret. Optional variables are `BACKEND_EC2_HOST`, `BACKEND_EC2_USER`, `BACKEND_EC2_REMOTE_ROOT`, and `BACKEND_EC2_SECURITY_GROUP_ID`; defaults match the current dev host and security group.
+
+The backend EC2 security group is `sg-0edcb8bd177aa82d4`. SSH is not permanently open to GitHub because GitHub-hosted runner IPs change. The backend deploy workflow uses AWS OIDC credentials to temporarily authorize the runner's current `/32` IP on port `22`, deploys over SSH, and revokes that rule in an `always()` cleanup step.
 
 Backend deployment now uses `scripts/deploy-backend-ec2.sh`. The script creates a small source archive, copies it to the EC2 host, builds the Docker image on the server, removes/recreates the `seamarg-backend` container, and reuses the existing `/opt/seamarg/backend.env`. It deliberately changes ownership only under `/opt/seamarg/source` so the secret env file can stay protected.
 
@@ -126,9 +128,10 @@ Operational issues encountered and fixed:
 
 Current next steps and risks:
 
-- Before relying on CI/CD, commit and push the current repo changes, then add `BACKEND_EC2_SSH_PRIVATE_KEY` as a GitHub Environment secret for `dev`. Optional environment variables are `BACKEND_EC2_HOST`, `BACKEND_EC2_USER`, and `BACKEND_EC2_REMOTE_ROOT`.
+- Before relying on CI/CD, commit and push the current repo changes, then add `BACKEND_EC2_SSH_PRIVATE_KEY` as a GitHub Environment secret for `dev`. Optional environment variables are `BACKEND_EC2_HOST`, `BACKEND_EC2_USER`, `BACKEND_EC2_REMOTE_ROOT`, and `BACKEND_EC2_SECURITY_GROUP_ID`.
 - For backend-only CI/CD, run the `Deploy` workflow with `target: backend`, `environment: dev`, `unlock_deploy` checked, and `terraform_apply` unchecked.
 - The backend host is manually provisioned and single-instance. There is no high availability, TLS/domain setup, automated host replacement, monitoring, or backup plan yet.
+- If GitHub Actions SSH fails with `connect to host ... port 22: Connection timed out`, check that the deployment role has EC2 security-group ingress permissions and that the temporary runner `/32` rule was added to `sg-0edcb8bd177aa82d4`.
 
 ## Lessons Already Learned
 

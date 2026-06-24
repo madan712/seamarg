@@ -71,6 +71,9 @@ Optional GitHub Environment variables:
 - `BACKEND_EC2_HOST`, defaults to `ec2-13-127-32-60.ap-south-1.compute.amazonaws.com`.
 - `BACKEND_EC2_USER`, defaults to `ec2-user`.
 - `BACKEND_EC2_REMOTE_ROOT`, defaults to `/opt/seamarg`.
+- `BACKEND_EC2_SECURITY_GROUP_ID`, defaults to `sg-0edcb8bd177aa82d4`.
+
+The backend job temporarily authorizes the GitHub Actions runner's public `/32` IP for SSH on the backend EC2 security group, deploys over SSH, and then revokes that rule. The GitHub Actions AWS role therefore needs `ec2:AuthorizeSecurityGroupIngress`, `ec2:DescribeSecurityGroups`, and `ec2:RevokeSecurityGroupIngress`.
 
 To deploy from GitHub Actions, run the `Deploy` workflow with:
 

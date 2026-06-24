@@ -177,9 +177,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ needs.guard.outputs.environment }}
     env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
       BACKEND_EC2_HOST: ${{ vars.BACKEND_EC2_HOST }}
       BACKEND_EC2_USER: ${{ vars.BACKEND_EC2_USER }}
       BACKEND_EC2_REMOTE_ROOT: ${{ vars.BACKEND_EC2_REMOTE_ROOT }}
+      BACKEND_EC2_SECURITY_GROUP_ID: ${{ vars.BACKEND_EC2_SECURITY_GROUP_ID }}
       BACKEND_EC2_SSH_PRIVATE_KEY: ${{ secrets.BACKEND_EC2_SSH_PRIVATE_KEY }}
     steps:
       - name: Checkout
@@ -187,7 +189,16 @@ jobs:
 
       - name: Validate backend deployment variables
         run: |
+          test -n "$AWS_REGION" || { echo "Set AWS_REGION as a GitHub Environment or repository variable."; exit 1; }
+          test -n "${{ vars.AWS_ROLE_TO_ASSUME }}" || { echo "Set AWS_ROLE_TO_ASSUME as a GitHub Environment or repository variable."; exit 1; }
           test -n "$BACKEND_EC2_SSH_PRIVATE_KEY" || { echo "Set BACKEND_EC2_SSH_PRIVATE_KEY as a GitHub Environment secret."; exit 1; }
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          role-session-name: seamarg-backend-${{ github.run_id }}
 
       - name: Write SSH key
         run: |
@@ -195,6 +206,48 @@ jobs:
           chmod 700 "$HOME/.ssh"
           printf '%s\n' "$BACKEND_EC2_SSH_PRIVATE_KEY" > "$HOME/.ssh/seamarg-backend-ec2.pem"
           chmod 600 "$HOME/.ssh/seamarg-backend-ec2.pem"
+
+      - name: Authorize runner SSH ingress
+        id: ssh_ingress
+        run: |
+          security_group_id="${BACKEND_EC2_SECURITY_GROUP_ID:-sg-0edcb8bd177aa82d4}"
+          runner_cidr="$(curl -fsS https://checkip.amazonaws.com)/32"
+          echo "security_group_id=${security_group_id}" >> "$GITHUB_OUTPUT"
+          echo "runner_cidr=${runner_cidr}" >> "$GITHUB_OUTPUT"
+          cat > ssh-ingress.json <<EOF
+          [
+            {
+              "IpProtocol": "tcp",
+              "FromPort": 22,
+              "ToPort": 22,
+              "IpRanges": [
+                {
+                  "CidrIp": "${runner_cidr}",
+                  "Description": "GitHub Actions backend deploy ${GITHUB_RUN_ID}"
+                }
+              ]
+            }
+          ]
+          EOF
+
+          if aws ec2 authorize-security-group-ingress \
+            --region "$AWS_REGION" \
+            --group-id "$security_group_id" \
+            --ip-permissions file://ssh-ingress.json; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+          else
+            status="$?"
+            if aws ec2 describe-security-groups \
+              --region "$AWS_REGION" \
+              --group-ids "$security_group_id" \
+              --query "SecurityGroups[0].IpPermissions[?FromPort==\`22\` && ToPort==\`22\`].IpRanges[?CidrIp==\`${runner_cidr}\`]" \
+              --output text | grep -q "$runner_cidr"; then
+              echo "authorized=false" >> "$GITHUB_OUTPUT"
+              echo "SSH ingress already exists for ${runner_cidr}."
+            else
+              exit "$status"
+            fi
+          fi
 
       - name: Deploy backend to EC2
         run: |
@@ -207,6 +260,16 @@ jobs:
         run: |
           backend_host="${BACKEND_EC2_HOST:-ec2-13-127-32-60.ap-south-1.compute.amazonaws.com}"
           curl -fsS "http://${backend_host}/api/public/hello"
+
+      - name: Revoke runner SSH ingress
+        if: ${{ always() && steps.ssh_ingress.outputs.authorized == 'true' }}
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --region "$AWS_REGION" \
+            --group-id "${{ steps.ssh_ingress.outputs.security_group_id }}" \
+            --protocol tcp \
+            --port 22 \
+            --cidr "${{ steps.ssh_ingress.outputs.runner_cidr }}"
 
   deploy-lambda:
     name: Deploy Lambda
