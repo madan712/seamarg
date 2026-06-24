@@ -53,13 +53,13 @@ Admin credentials are configured through environment variables:
 
 On EC2, provide these environment variables to the backend Docker container directly or through a host-local secret file that is not committed. `COGNITO_ISSUER_URI` should continue to come from the Terraform-created Cognito user pool.
 
-The current dev backend EC2 host is `ec2-13-127-32-60.ap-south-1.compute.amazonaws.com`, connecting as `ec2-user` with the local key at `/Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem`. It runs Amazon Linux 2023 with Docker enabled. The backend container is named `seamarg-backend`, uses image `seamarg-backend:latest`, maps host port `80` to container port `8080`, and uses restart policy `unless-stopped`. Runtime environment variables live on the server at `/opt/seamarg/backend.env` with `600` permissions and must not be committed or printed.
+The current dev backend EC2 host is `ec2-13-233-83-132.ap-south-1.compute.amazonaws.com`, connecting as `ec2-user` with the local key at `/Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem`. It runs Amazon Linux 2023 with Docker enabled. The instance ID is `i-04e02dc88bcc372b3`. The backend container is named `seamarg-backend`, uses image `seamarg-backend:latest`, maps host port `80` to container port `8080`, and uses restart policy `unless-stopped`. Runtime environment variables live on the server at `/opt/seamarg/backend.env` with `600` permissions and must not be committed or printed.
 
 GitHub Actions backend deployment requires the `BACKEND_EC2_SSH_PRIVATE_KEY` GitHub Environment secret. Optional variables are `BACKEND_EC2_HOST`, `BACKEND_EC2_USER`, `BACKEND_EC2_REMOTE_ROOT`, and `BACKEND_EC2_SECURITY_GROUP_ID`; defaults match the current dev host and security group.
 
 The backend EC2 security group is `sg-0edcb8bd177aa82d4`. SSH is not permanently open to GitHub because GitHub-hosted runner IPs change. The backend deploy workflow uses AWS OIDC credentials to temporarily authorize the runner's current `/32` IP on port `22`, deploys over SSH, and revokes that rule in an `always()` cleanup step.
 
-Backend deployment now uses `scripts/deploy-backend-ec2.sh`. The script creates a small source archive, copies it to the EC2 host, builds the Docker image on the server, removes/recreates the `seamarg-backend` container, and reuses the existing `/opt/seamarg/backend.env`. It deliberately changes ownership only under `/opt/seamarg/source` so the secret env file can stay protected.
+Backend deployment now uses `scripts/deploy-backend-ec2.sh`. The GitHub workflow builds `backend/build/libs/seamarg-backend.jar` before opening SSH. The script uploads the jar plus a small runtime Dockerfile to EC2, builds the runtime image on the server, removes/recreates the `seamarg-backend` container, and reuses the existing `/opt/seamarg/backend.env`. It deliberately changes ownership only under `/opt/seamarg/release` so the secret env file can stay protected.
 
 The known dev Cognito issuer is `https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_7B41ZYOET`. Confirm it from Terraform before relying on it:
 
@@ -71,9 +71,9 @@ Useful backend checks:
 
 ```bash
 ./gradlew :backend:test :backend:bootJar
-scripts/deploy-backend-ec2.sh ec2-user@ec2-13-127-32-60.ap-south-1.compute.amazonaws.com /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem
-curl -i http://ec2-13-127-32-60.ap-south-1.compute.amazonaws.com/api/public/hello
-ssh -i /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem ec2-user@ec2-13-127-32-60.ap-south-1.compute.amazonaws.com 'sudo docker ps --filter name=seamarg-backend'
+scripts/deploy-backend-ec2.sh ec2-user@ec2-13-233-83-132.ap-south-1.compute.amazonaws.com /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem
+curl -i http://ec2-13-233-83-132.ap-south-1.compute.amazonaws.com/api/public/hello
+ssh -i /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem ec2-user@ec2-13-233-83-132.ap-south-1.compute.amazonaws.com 'sudo docker ps --filter name=seamarg-backend'
 ```
 
 The old dev EKS cluster was named `seamarg-dev-eks`, with backend namespace `seamarg`, service `seamarg-backend`, ECR repo `seamarg-dev-backend`, VPC `vpc-0a104403d9d102d07`, and classic ELB `a7967211d441d405abd01f15c17995ff`. These resources were deleted on June 24, 2026. A post-cleanup Terraform plan reported no changes, and Terraform state no longer contains backend/EKS/ECR/VPC/Kubernetes resources.
@@ -125,6 +125,9 @@ Operational issues encountered and fixed:
 - EC2 launch initially showed no VPCs in `ap-south-1`; a public EC2 backend needs a VPC, public subnet, route to an Internet Gateway, and security-group rules for SSH/HTTP. An Internet Gateway has no separate hourly cost, but NAT Gateways, EC2, EBS, and unused Elastic IPs can cost money.
 - The Kubernetes `LoadBalancer` service had to be deleted and its classic ELB had to disappear before old EKS networking could be fully removed.
 - Local `actionlint` was not installed, so workflow verification used YAML parsing rather than a GitHub Actions semantic lint.
+- A backend CI deploy reached EC2 but failed with `client_loop: send disconnect: Broken pipe` while Docker was running a full Gradle build on the EC2 host. The fix was to move `./gradlew :backend:bootJar` into GitHub Actions and make the EC2 script upload the prebuilt jar, then build only a small runtime image remotely.
+- The old remote Gradle/Docker build left the `t3.micro` backend instance unresponsive to SSH and HTTP. A normal reboot did not recover it, but `stop-instances --force` followed by start recovered the instance and changed its public DNS from `ec2-13-127-32-60.ap-south-1.compute.amazonaws.com` to `ec2-13-233-83-132.ap-south-1.compute.amazonaws.com`.
+- After the stop/start recovery, the jar-only `scripts/deploy-backend-ec2.sh` path was verified manually against the new host and `/api/public/hello` returned successfully.
 
 Current next steps and risks:
 

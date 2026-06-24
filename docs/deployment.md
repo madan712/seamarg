@@ -57,7 +57,7 @@ Set that value as the backend container's `COGNITO_ISSUER_URI` environment varia
 The dev backend host is:
 
 ```text
-ec2-13-127-32-60.ap-south-1.compute.amazonaws.com
+ec2-13-233-83-132.ap-south-1.compute.amazonaws.com
 ```
 
 The server keeps backend runtime variables in `/opt/seamarg/backend.env`. Do not commit or print that file because it contains `SEAMARG_ADMIN_PASSWORD`.
@@ -68,12 +68,14 @@ Required GitHub Environment secret for backend CI/CD:
 
 Optional GitHub Environment variables:
 
-- `BACKEND_EC2_HOST`, defaults to `ec2-13-127-32-60.ap-south-1.compute.amazonaws.com`.
+- `BACKEND_EC2_HOST`, defaults to `ec2-13-233-83-132.ap-south-1.compute.amazonaws.com`.
 - `BACKEND_EC2_USER`, defaults to `ec2-user`.
 - `BACKEND_EC2_REMOTE_ROOT`, defaults to `/opt/seamarg`.
 - `BACKEND_EC2_SECURITY_GROUP_ID`, defaults to `sg-0edcb8bd177aa82d4`.
 
 The backend job temporarily authorizes the GitHub Actions runner's public `/32` IP for SSH on the backend EC2 security group, deploys over SSH, and then revokes that rule. The GitHub Actions AWS role therefore needs `ec2:AuthorizeSecurityGroupIngress`, `ec2:DescribeSecurityGroups`, and `ec2:RevokeSecurityGroupIngress`.
+
+The job builds `backend/build/libs/seamarg-backend.jar` on the GitHub runner before opening SSH. `scripts/deploy-backend-ec2.sh` uploads that jar to EC2, builds a small runtime image there, and restarts the container using the existing `/opt/seamarg/backend.env`.
 
 To deploy from GitHub Actions, run the `Deploy` workflow with:
 
@@ -86,6 +88,6 @@ To rebuild and restart the backend container manually:
 
 ```bash
 scripts/deploy-backend-ec2.sh \
-  ec2-user@ec2-13-127-32-60.ap-south-1.compute.amazonaws.com \
+  ec2-user@ec2-13-233-83-132.ap-south-1.compute.amazonaws.com \
   /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem
 ```

@@ -187,11 +187,11 @@ Keep `SEAMARG_ADMIN_PASSWORD` out of Git and Terraform state. The Cognito issuer
 terraform -chdir=infra/terraform/environments/dev output -raw cognito_issuer_uri
 ```
 
-On the EC2 host, keep those values in `/opt/seamarg/backend.env` with `600` permissions. To rebuild and restart the backend container after code changes:
+On the EC2 host, keep those values in `/opt/seamarg/backend.env` with `600` permissions. To build the backend jar locally and restart the backend container after code changes:
 
 ```bash
 scripts/deploy-backend-ec2.sh \
-  ec2-user@ec2-13-127-32-60.ap-south-1.compute.amazonaws.com \
+  ec2-user@ec2-13-233-83-132.ap-south-1.compute.amazonaws.com \
   /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem
 ```
 
@@ -231,4 +231,4 @@ The workflow has an `unlock_deploy` checkbox and a `target` selector:
 
 The `infra` target runs Terraform only when `terraform_apply` is checked. Other targets build each selected component separately and then call the matching script in `scripts/`.
 
-Backend deployment rebuilds the Docker image on the EC2 host, restarts the single backend container, and smoke-tests `/api/public/hello`. Frontend deployment builds the Vite static files, uploads them to a private S3 bucket, and invalidates the CloudFront distribution that is allowed to read that bucket.
+Backend deployment builds the Spring Boot jar in GitHub Actions, copies the jar to the EC2 host, rebuilds a small runtime Docker image there, restarts the single backend container, and smoke-tests `/api/public/hello`. Frontend deployment builds the Vite static files, uploads them to a private S3 bucket, and invalidates the CloudFront distribution that is allowed to read that bucket.

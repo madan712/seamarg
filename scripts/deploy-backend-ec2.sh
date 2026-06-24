@@ -8,31 +8,54 @@ remote_root="${3:-/opt/seamarg}"
 image_name="${BACKEND_IMAGE_NAME:-seamarg-backend:latest}"
 container_name="${BACKEND_CONTAINER_NAME:-seamarg-backend}"
 host_port="${BACKEND_HOST_PORT:-80}"
+backend_jar="${BACKEND_JAR:-backend/build/libs/seamarg-backend.jar}"
 
-archive="$(mktemp -t seamarg-backend-source.XXXXXX.tgz)"
+archive_dir="$(mktemp -d -t seamarg-backend-release.XXXXXX)"
+archive="$(mktemp -t seamarg-backend-release.XXXXXX.tgz)"
 cleanup() {
+  rm -rf "$archive_dir"
   rm -f "$archive"
 }
 trap cleanup EXIT
 
-COPYFILE_DISABLE=1 tar -czf "$archive" \
-  gradlew \
-  gradle \
-  settings.gradle \
-  build.gradle \
-  gradle.properties \
-  backend/Dockerfile \
-  backend/build.gradle \
-  backend/settings.gradle \
-  backend/src
+if [[ ! -f "$backend_jar" ]]; then
+  ./gradlew :backend:bootJar --no-daemon
+fi
+
+cp "$backend_jar" "$archive_dir/app.jar"
+cat > "$archive_dir/Dockerfile" <<'DOCKERFILE'
+FROM eclipse-temurin:21-jre-alpine
+
+WORKDIR /app
+
+RUN addgroup -S seamarg && adduser -S seamarg -G seamarg
+
+COPY app.jar app.jar
+
+USER seamarg
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+DOCKERFILE
+
+if command -v xattr >/dev/null 2>&1; then
+  xattr -c "$archive_dir/Dockerfile" "$archive_dir/app.jar" 2>/dev/null || true
+fi
+
+COPYFILE_DISABLE=1 tar -czf "$archive" -C "$archive_dir" Dockerfile app.jar
 
 ssh_opts=(
   -i "$ssh_key"
+  -o BatchMode=yes
+  -o ConnectTimeout=30
+  -o ConnectionAttempts=3
   -o StrictHostKeyChecking=accept-new
+  -o ServerAliveInterval=30
+  -o ServerAliveCountMax=20
+  -o TCPKeepAlive=yes
 )
 
-ssh "${ssh_opts[@]}" "$ssh_host" "sudo mkdir -p '$remote_root/source' && sudo chown -R ec2-user:ec2-user '$remote_root/source'"
-scp "${ssh_opts[@]}" "$archive" "$ssh_host:/tmp/seamarg-backend-source.tgz"
+scp "${ssh_opts[@]}" "$archive" "$ssh_host:/tmp/seamarg-backend-release.tgz"
 
 ssh "${ssh_opts[@]}" "$ssh_host" bash -s -- "$remote_root" "$image_name" "$container_name" "$host_port" <<'REMOTE_SCRIPT'
 set -euo pipefail
@@ -49,13 +72,14 @@ if [[ ! -f "$env_file" ]]; then
   exit 1
 fi
 
-sudo rm -rf "$remote_root/source"
-sudo mkdir -p "$remote_root/source"
-sudo chown -R "$(id -un):$(id -gn)" "$remote_root/source"
-tar -xzf /tmp/seamarg-backend-source.tgz -C "$remote_root/source"
+sudo rm -rf "$remote_root/release"
+sudo mkdir -p "$remote_root/release"
+sudo chown -R "$(id -un):$(id -gn)" "$remote_root/release"
+tar -xzf /tmp/seamarg-backend-release.tgz -C "$remote_root/release"
+rm -f /tmp/seamarg-backend-release.tgz
 
-cd "$remote_root/source"
-sudo docker build -f backend/Dockerfile -t "$image_name" .
+cd "$remote_root/release"
+sudo docker build -t "$image_name" .
 sudo docker rm -f "$container_name" >/dev/null 2>&1 || true
 sudo docker run -d \
   --name "$container_name" \

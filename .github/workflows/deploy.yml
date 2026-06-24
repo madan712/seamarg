@@ -37,6 +37,7 @@ permissions:
   id-token: write
 
 env:
+  JAVA_VERSION: '21'
   NODE_VERSION: '24'
 
 jobs:
@@ -200,6 +201,16 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
           role-session-name: seamarg-backend-${{ github.run_id }}
 
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Build backend
+        run: ./gradlew :backend:bootJar --no-daemon
+
       - name: Write SSH key
         run: |
           mkdir -p "$HOME/.ssh"
@@ -251,14 +262,14 @@ jobs:
 
       - name: Deploy backend to EC2
         run: |
-          backend_host="${BACKEND_EC2_HOST:-ec2-13-127-32-60.ap-south-1.compute.amazonaws.com}"
+          backend_host="${BACKEND_EC2_HOST:-ec2-13-233-83-132.ap-south-1.compute.amazonaws.com}"
           backend_user="${BACKEND_EC2_USER:-ec2-user}"
           remote_root="${BACKEND_EC2_REMOTE_ROOT:-/opt/seamarg}"
           ./scripts/deploy-backend-ec2.sh "${backend_user}@${backend_host}" "$HOME/.ssh/seamarg-backend-ec2.pem" "$remote_root"
 
       - name: Smoke test backend
         run: |
-          backend_host="${BACKEND_EC2_HOST:-ec2-13-127-32-60.ap-south-1.compute.amazonaws.com}"
+          backend_host="${BACKEND_EC2_HOST:-ec2-13-233-83-132.ap-south-1.compute.amazonaws.com}"
           curl -fsS "http://${backend_host}/api/public/hello"
 
       - name: Revoke runner SSH ingress
