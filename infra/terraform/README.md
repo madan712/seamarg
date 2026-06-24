@@ -3,14 +3,9 @@
 Terraform code is organized by environment and reusable module:
 
 - `environments/dev`
-- `environments/staging`
-- `environments/prod`
-- `modules/backend`
-- `modules/backend-config`
 - `modules/auth`
 - `modules/frontend`
+- `modules/github-actions`
 - `modules/lambda`
 
-The backend module contains the starter ECR and EKS infrastructure. The backend-config module manages the Kubernetes namespace and non-secret backend ConfigMap, including the Cognito issuer URI consumed by Spring Security. The auth module creates the Cognito user pool, frontend app client, and hosted UI domain for customer authentication. The frontend module creates a private S3 bucket, CloudFront distribution, Origin Access Control, and the bucket policy that allows only that CloudFront distribution to read static files. The Lambda module remains a placeholder until runtime choices are finalized.
-
-See `docs/aws-eks-backend-deployment.md` from the repository root for the bootstrap and deployment flow.
+The dev stack creates frontend hosting, customer auth, the deployment IAM role used by GitHub Actions, and placeholder Lambda infrastructure. EKS, ECR, and Kubernetes backend config are no longer managed here; the backend is moving to a single EC2 Docker host.

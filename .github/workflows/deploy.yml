@@ -26,8 +26,6 @@ on:
         default: dev
         options:
           - dev
-          - staging
-          - prod
       terraform_apply:
         description: Apply Terraform before deployment.
         required: true
@@ -39,7 +37,6 @@ permissions:
   id-token: write
 
 env:
-  JAVA_VERSION: '21'
   NODE_VERSION: '24'
 
 jobs:
@@ -103,70 +100,6 @@ jobs:
 
       - name: Apply Terraform
         run: terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} apply -auto-approve -input=false
-
-  deploy-backend:
-    name: Deploy backend
-    needs:
-      - guard
-      - terraform
-    if: ${{ always() && needs.guard.outputs.unlocked == 'true' && (needs.guard.outputs.target == 'backend' || needs.guard.outputs.target == 'all') && (needs.terraform.result == 'success' || needs.terraform.result == 'skipped') }}
-    runs-on: ubuntu-latest
-    environment: ${{ needs.guard.outputs.environment }}
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      BACKEND_ECR_REPOSITORY: seamarg-${{ needs.guard.outputs.environment }}-backend
-      EKS_CLUSTER_NAME: seamarg-${{ needs.guard.outputs.environment }}-eks
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Validate AWS deployment variables
-        run: |
-          test -n "$AWS_REGION" || { echo "Set AWS_REGION as a GitHub Environment or repository variable."; exit 1; }
-          test -n "${{ vars.AWS_ROLE_TO_ASSUME }}" || { echo "Set AWS_ROLE_TO_ASSUME as a GitHub Environment or repository variable."; exit 1; }
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
-          role-session-name: seamarg-backend-${{ github.run_id }}
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
-
-      - name: Build backend
-        run: ./gradlew :backend:bootJar
-
-      - name: Log in to Amazon ECR
-        id: aws
-        run: |
-          account_id="$(aws sts get-caller-identity --query Account --output text)"
-          registry="${account_id}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$registry"
-          echo "account_id=${account_id}" >> "$GITHUB_OUTPUT"
-          echo "registry=${registry}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push backend image
-        id: image
-        run: |
-          image_uri="${{ steps.aws.outputs.registry }}/${BACKEND_ECR_REPOSITORY}:${GITHUB_SHA}"
-          docker build -f backend/Dockerfile -t "$image_uri" .
-          docker push "$image_uri"
-          echo "image_uri=${image_uri}" >> "$GITHUB_OUTPUT"
-
-      - name: Install kubectl
-        run: |
-          curl -fsSL -o kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/kubectl
-
-      - name: Deploy backend
-        run: ./scripts/deploy-backend.sh "${{ needs.guard.outputs.environment }}" "${{ steps.image.outputs.image_uri }}"
 
   deploy-frontend:
     name: Deploy frontend
@@ -234,6 +167,46 @@ jobs:
 
       - name: Deploy frontend
         run: ./scripts/deploy-frontend.sh "${{ needs.guard.outputs.environment }}" "frontend/dist" "${{ steps.frontend_infra.outputs.bucket_name }}" "${{ steps.frontend_infra.outputs.cloudfront_distribution_id }}" "${{ steps.frontend_infra.outputs.cloudfront_domain_name }}"
+
+  deploy-backend:
+    name: Deploy backend
+    needs:
+      - guard
+      - terraform
+    if: ${{ always() && needs.guard.outputs.unlocked == 'true' && (needs.guard.outputs.target == 'backend' || needs.guard.outputs.target == 'all') && (needs.terraform.result == 'success' || needs.terraform.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: ${{ needs.guard.outputs.environment }}
+    env:
+      BACKEND_EC2_HOST: ${{ vars.BACKEND_EC2_HOST }}
+      BACKEND_EC2_USER: ${{ vars.BACKEND_EC2_USER }}
+      BACKEND_EC2_REMOTE_ROOT: ${{ vars.BACKEND_EC2_REMOTE_ROOT }}
+      BACKEND_EC2_SSH_PRIVATE_KEY: ${{ secrets.BACKEND_EC2_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate backend deployment variables
+        run: |
+          test -n "$BACKEND_EC2_SSH_PRIVATE_KEY" || { echo "Set BACKEND_EC2_SSH_PRIVATE_KEY as a GitHub Environment secret."; exit 1; }
+
+      - name: Write SSH key
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$BACKEND_EC2_SSH_PRIVATE_KEY" > "$HOME/.ssh/seamarg-backend-ec2.pem"
+          chmod 600 "$HOME/.ssh/seamarg-backend-ec2.pem"
+
+      - name: Deploy backend to EC2
+        run: |
+          backend_host="${BACKEND_EC2_HOST:-ec2-13-127-32-60.ap-south-1.compute.amazonaws.com}"
+          backend_user="${BACKEND_EC2_USER:-ec2-user}"
+          remote_root="${BACKEND_EC2_REMOTE_ROOT:-/opt/seamarg}"
+          ./scripts/deploy-backend-ec2.sh "${backend_user}@${backend_host}" "$HOME/.ssh/seamarg-backend-ec2.pem" "$remote_root"
+
+      - name: Smoke test backend
+        run: |
+          backend_host="${BACKEND_EC2_HOST:-ec2-13-127-32-60.ap-south-1.compute.amazonaws.com}"
+          curl -fsS "http://${backend_host}/api/public/hello"
 
   deploy-lambda:
     name: Deploy Lambda

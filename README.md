@@ -5,7 +5,7 @@
 - `backend` is a Spring Boot Java service managed by Gradle.
 - `frontend` is a TypeScript/Vite web app.
 - `lambda` is a TypeScript AWS Lambda placeholder for future functions.
-- `infra/terraform` contains infrastructure-as-code for EKS, ECR, S3, CloudFront, Cognito, and future Lambda infrastructure.
+- `infra/terraform` contains dev infrastructure-as-code for S3, CloudFront, Cognito, GitHub Actions IAM, and future Lambda infrastructure.
 - `.github/workflows` contains CI and manually unlocked deployment workflows.
 
 ## Local development
@@ -170,64 +170,30 @@ Defaults:
 - Role: `ADMIN`, which becomes Spring authority `ROLE_ADMIN`
 - Header: `X-Admin-Password`
 
-### Server setup on EKS
+### Server setup on EC2
 
-Terraform manages the backend namespace and non-secret ConfigMap:
-
-- Namespace: `seamarg`
-- ConfigMap: `seamarg-backend-config`
-- Keys: `admin-username`, `admin-role`, `cognito-issuer-uri`
-
-Do not manually create or patch `seamarg-backend-config` during normal setup. The Cognito issuer comes from the Terraform-created Cognito user pool, and the username/role come from Terraform variables `backend_admin_username` and `backend_admin_role`.
-
-For the existing dev cluster, if the namespace or ConfigMap was created manually before this Terraform code was added, import them into Terraform state once:
-
-```bash
-terraform -chdir=infra/terraform/environments/dev import \
-  module.backend_config.kubernetes_namespace_v1.backend seamarg
-
-terraform -chdir=infra/terraform/environments/dev import \
-  module.backend_config.kubernetes_config_map_v1.backend_config seamarg/seamarg-backend-config
-```
-
-Then apply infrastructure through the GitHub Actions workflow:
+The AWS backend deployment runs as a single Docker container on an EC2 host. Provide the backend container with these runtime values:
 
 ```text
-target: infra
-environment: dev
-unlock_deploy: checked
-terraform_apply: checked
+SEAMARG_ADMIN_USERNAME=admin
+SEAMARG_ADMIN_PASSWORD=<admin-password>
+SEAMARG_ADMIN_ROLE=ADMIN
+COGNITO_ISSUER_URI=<terraform-output-cognito_issuer_uri>
 ```
 
-Create or rotate the admin password:
+Keep `SEAMARG_ADMIN_PASSWORD` out of Git and Terraform state. The Cognito issuer still comes from the dev Terraform output:
 
 ```bash
-export ADMIN_PASSWORD="$(openssl rand -base64 36)"
-echo "$ADMIN_PASSWORD"
-
-kubectl -n seamarg create secret generic seamarg-backend-secrets \
-  --from-literal=admin-password="$ADMIN_PASSWORD" \
-  --dry-run=client -o yaml | kubectl apply -f -
+terraform -chdir=infra/terraform/environments/dev output -raw cognito_issuer_uri
 ```
 
-Restart the backend after any username, password, role, or Cognito issuer change:
+On the EC2 host, keep those values in `/opt/seamarg/backend.env` with `600` permissions. To rebuild and restart the backend container after code changes:
 
 ```bash
-kubectl -n seamarg rollout restart deployment/seamarg-backend
-kubectl -n seamarg rollout status deployment/seamarg-backend
+scripts/deploy-backend-ec2.sh \
+  ec2-user@ec2-13-127-32-60.ap-south-1.compute.amazonaws.com \
+  /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem
 ```
-
-Test the server endpoint:
-
-```bash
-export BACKEND_URL="http://$(kubectl -n seamarg get service seamarg-backend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
-
-curl -i "$BACKEND_URL/api/public/hello"
-curl -i "$BACKEND_URL/api/admin/hello"
-curl -i -H "X-Admin-Password: $ADMIN_PASSWORD" "$BACKEND_URL/api/admin/hello"
-```
-
-The unauthenticated admin request should return `401`. The request with the correct password should return the configured admin username as `principal`.
 
 ### Local admin testing
 
@@ -265,6 +231,4 @@ The workflow has an `unlock_deploy` checkbox and a `target` selector:
 
 The `infra` target runs Terraform only when `terraform_apply` is checked. Other targets build each selected component separately and then call the matching script in `scripts/`.
 
-Backend deployment builds a Docker image, pushes it to ECR, and rolls it out to EKS. Frontend deployment builds the Vite static files, uploads them to a private S3 bucket, and invalidates the CloudFront distribution that is allowed to read that bucket.
-
-Backend deployment to AWS EKS is documented in `docs/aws-eks-backend-deployment.md`.
+Backend deployment rebuilds the Docker image on the EC2 host, restarts the single backend container, and smoke-tests `/api/public/hello`. Frontend deployment builds the Vite static files, uploads them to a private S3 bucket, and invalidates the CloudFront distribution that is allowed to read that bucket.

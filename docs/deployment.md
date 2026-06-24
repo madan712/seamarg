@@ -6,12 +6,10 @@ Manual inputs:
 
 - `unlock_deploy`: must be checked before any deploy job runs.
 - `target`: choose `backend`, `frontend`, `lambda`, `infra`, or `all`.
-- `environment`: choose the GitHub Environment name.
+- `environment`: choose `dev`.
 - `terraform_apply`: optionally apply Terraform before deploying.
 
-Use GitHub Environment protection rules for approvals before production deployments.
-
-Backend deployment to AWS EKS is documented in `docs/aws-eks-backend-deployment.md`.
+Backend deployment runs on a single EC2 Docker host.
 
 ## Frontend Deployment
 
@@ -38,7 +36,7 @@ Required GitHub Environment or repository variables:
 
 ## Cognito Auth Infrastructure
 
-Terraform creates a Cognito user pool for customer authentication, a browser-safe frontend app client, and a hosted UI domain. The frontend CloudFront URL is registered as a callback and logout URL. Non-prod environments also register `http://localhost:5173` for local frontend development.
+Terraform creates a Cognito user pool for customer authentication, a browser-safe frontend app client, and a hosted UI domain. The frontend CloudFront URL is registered as a callback and logout URL. The dev stack also registers `http://localhost:5173` for local frontend development.
 
 To create or update only infrastructure, run the `Deploy` workflow with:
 
@@ -52,4 +50,39 @@ After Terraform completes, read the backend issuer value:
 terraform -chdir=infra/terraform/environments/dev output -raw cognito_issuer_uri
 ```
 
-Set that value in the backend Kubernetes ConfigMap as `COGNITO_ISSUER_URI`.
+Set that value as the backend container's `COGNITO_ISSUER_URI` environment variable on the EC2 host.
+
+## Backend EC2 Deployment
+
+The dev backend host is:
+
+```text
+ec2-13-127-32-60.ap-south-1.compute.amazonaws.com
+```
+
+The server keeps backend runtime variables in `/opt/seamarg/backend.env`. Do not commit or print that file because it contains `SEAMARG_ADMIN_PASSWORD`.
+
+Required GitHub Environment secret for backend CI/CD:
+
+- `BACKEND_EC2_SSH_PRIVATE_KEY`: private SSH key that can connect to the backend EC2 host.
+
+Optional GitHub Environment variables:
+
+- `BACKEND_EC2_HOST`, defaults to `ec2-13-127-32-60.ap-south-1.compute.amazonaws.com`.
+- `BACKEND_EC2_USER`, defaults to `ec2-user`.
+- `BACKEND_EC2_REMOTE_ROOT`, defaults to `/opt/seamarg`.
+
+To deploy from GitHub Actions, run the `Deploy` workflow with:
+
+- `target`: `backend`
+- `environment`: `dev`
+- `unlock_deploy`: checked
+- `terraform_apply`: unchecked unless infrastructure changed
+
+To rebuild and restart the backend container manually:
+
+```bash
+scripts/deploy-backend-ec2.sh \
+  ec2-user@ec2-13-127-32-60.ap-south-1.compute.amazonaws.com \
+  /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem
+```

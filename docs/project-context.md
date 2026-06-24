@@ -17,24 +17,25 @@ Do not commit or push during a context-save pass unless the user explicitly asks
 - `backend/`: Spring Boot Java backend built with Gradle and Java 21.
 - `frontend/`: TypeScript/Vite app deployed as static files.
 - `lambda/`: TypeScript Lambda workspace placeholder for future functions.
-- `infra/terraform/`: Terraform for AWS infrastructure.
-- `k8s/backend/`: Kubernetes manifests for the backend deployment.
+- `infra/terraform/`: Terraform for the active dev AWS infrastructure.
 - `.github/workflows/deploy.yml`: manually triggered GitHub Actions deployment workflow.
 
 ## AWS And Deployment Model
 
 The active AWS region is `ap-south-1`. The known dev AWS account is `695663959248`. The Terraform state bucket used so far is `seamarg-terraform-state-695663959248-ap-south-1`, with state key `seamarg/dev/terraform.tfstate`.
 
-Infrastructure is managed through Terraform environment stacks under `infra/terraform/environments/{dev,staging,prod}` and reusable modules under `infra/terraform/modules`.
+Infrastructure is now managed only through the dev Terraform stack under `infra/terraform/environments/dev` and reusable modules under `infra/terraform/modules`. The unused staging and prod Terraform stacks were removed; CI and deploy workflows now expose only `dev` as an environment choice.
 
-GitHub Actions deploys through OIDC using an IAM role similar to `arn:aws:iam::695663959248:role/seamarg-dev-github-actions`. The workflow is manually unlocked with:
+Backend EKS deployment was retired on June 24, 2026 because infrastructure cost was too high for the expected initial traffic. The replacement is one Dockerized backend instance on a manually provided EC2 host. Terraform no longer contains EKS, ECR, or Kubernetes backend config modules.
+
+GitHub Actions deploys through OIDC using IAM role `arn:aws:iam::695663959248:role/seamarg-dev-github-actions`. Terraform manages that role through `infra/terraform/modules/github-actions`; permissions are scoped to S3, IAM, Cognito, CloudFront, and `sts:GetCallerIdentity` for the current dev infrastructure. The workflow is manually unlocked with:
 
 - `environment`: usually `dev`
 - `target`: `backend`, `frontend`, `lambda`, `infra`, or `all`
 - `unlock_deploy`: must be checked
 - `terraform_apply`: checked only when infrastructure should be applied
 
-Use `target: backend` with `terraform_apply` unchecked for normal backend-only app deployments. Use `target: infra` with `terraform_apply` checked only for Terraform changes.
+Use `target: infra` with `terraform_apply` checked only for Terraform changes. Use `target: backend` with `terraform_apply` unchecked for normal backend-only EC2 Docker deploys.
 
 ## Backend Status
 
@@ -50,7 +51,13 @@ Admin credentials are configured through environment variables:
 - `SEAMARG_ADMIN_PASSWORD`, no default password
 - `SEAMARG_ADMIN_ROLE`, default `ADMIN`, mapped to Spring authority `ROLE_ADMIN`
 
-On EKS, `SEAMARG_ADMIN_PASSWORD` comes from Kubernetes secret `seamarg-backend-secrets`, key `admin-password`. Terraform manages the backend namespace `seamarg` and non-secret config map `seamarg-backend-config`, including `admin-username`, `admin-role`, and `cognito-issuer-uri`.
+On EC2, provide these environment variables to the backend Docker container directly or through a host-local secret file that is not committed. `COGNITO_ISSUER_URI` should continue to come from the Terraform-created Cognito user pool.
+
+The current dev backend EC2 host is `ec2-13-127-32-60.ap-south-1.compute.amazonaws.com`, connecting as `ec2-user` with the local key at `/Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem`. It runs Amazon Linux 2023 with Docker enabled. The backend container is named `seamarg-backend`, uses image `seamarg-backend:latest`, maps host port `80` to container port `8080`, and uses restart policy `unless-stopped`. Runtime environment variables live on the server at `/opt/seamarg/backend.env` with `600` permissions and must not be committed or printed.
+
+GitHub Actions backend deployment requires the `BACKEND_EC2_SSH_PRIVATE_KEY` GitHub Environment secret. Optional variables are `BACKEND_EC2_HOST`, `BACKEND_EC2_USER`, and `BACKEND_EC2_REMOTE_ROOT`; defaults match the current dev host.
+
+Backend deployment now uses `scripts/deploy-backend-ec2.sh`. The script creates a small source archive, copies it to the EC2 host, builds the Docker image on the server, removes/recreates the `seamarg-backend` container, and reuses the existing `/opt/seamarg/backend.env`. It deliberately changes ownership only under `/opt/seamarg/source` so the secret env file can stay protected.
 
 The known dev Cognito issuer is `https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_7B41ZYOET`. Confirm it from Terraform before relying on it:
 
@@ -62,22 +69,12 @@ Useful backend checks:
 
 ```bash
 ./gradlew :backend:test :backend:bootJar
-kubectl kustomize k8s/backend
-kubectl -n seamarg rollout status deployment/seamarg-backend
+scripts/deploy-backend-ec2.sh ec2-user@ec2-13-127-32-60.ap-south-1.compute.amazonaws.com /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem
+curl -i http://ec2-13-127-32-60.ap-south-1.compute.amazonaws.com/api/public/hello
+ssh -i /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem ec2-user@ec2-13-127-32-60.ap-south-1.compute.amazonaws.com 'sudo docker ps --filter name=seamarg-backend'
 ```
 
-The dev EKS cluster is named `seamarg-dev-eks`, and the backend Kubernetes namespace is `seamarg`. The service is `seamarg-backend` and has been exposed as an AWS LoadBalancer. To get the URL:
-
-```bash
-export BACKEND_URL="http://$(kubectl -n seamarg get service seamarg-backend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
-```
-
-If a Cognito access token works locally but returns unauthorized on EKS, compare these three values: the token `iss` claim, Terraform output `cognito_issuer_uri`, and the pod environment value:
-
-```bash
-kubectl -n seamarg get configmap seamarg-backend-config -o jsonpath='{.data.cognito-issuer-uri}{"\n"}'
-kubectl -n seamarg exec deployment/seamarg-backend -- sh -c 'printf "%s\n" "$COGNITO_ISSUER_URI"'
-```
+The old dev EKS cluster was named `seamarg-dev-eks`, with backend namespace `seamarg`, service `seamarg-backend`, ECR repo `seamarg-dev-backend`, VPC `vpc-0a104403d9d102d07`, and classic ELB `a7967211d441d405abd01f15c17995ff`. These resources were deleted on June 24, 2026. A post-cleanup Terraform plan reported no changes, and Terraform state no longer contains backend/EKS/ECR/VPC/Kubernetes resources.
 
 ## Frontend Status
 
@@ -100,19 +97,46 @@ Terraform creates the customer Cognito user pool, frontend app client, and hoste
 
 Native Cognito email sign-up is the current baseline. Google/Gmail social login is future work and will require adding a Google identity provider, client ID/secret handling, and supported identity providers in Terraform.
 
+## June 24, 2026 Session Notes
+
+AWS cleanup was run in `ap-south-1` against account `695663959248` using the local `personal` AWS CLI profile. Useful verification commands from the cleanup:
+
+```bash
+AWS_PROFILE=personal aws sts get-caller-identity
+AWS_PROFILE=personal aws eks list-clusters --region ap-south-1
+AWS_PROFILE=personal aws ecr describe-repositories --region ap-south-1
+terraform -chdir=infra/terraform/environments/dev plan -detailed-exitcode
+terraform -chdir=infra/terraform/environments/dev state list | rg 'backend|eks|ecr|vpc|kubernetes'
+```
+
+Lightweight verification that worked after the repo changes:
+
+```bash
+bash -n scripts/deploy-backend-ec2.sh
+ruby -e 'require "yaml"; %w[.github/workflows/deploy.yml .github/workflows/ci.yml].each { |f| YAML.load_file(f); puts "#{f} ok" }'
+terraform -chdir=infra/terraform/environments/dev validate
+./gradlew :backend:test
+```
+
+Operational issues encountered and fixed:
+
+- EC2 launch initially showed no VPCs in `ap-south-1`; a public EC2 backend needs a VPC, public subnet, route to an Internet Gateway, and security-group rules for SSH/HTTP. An Internet Gateway has no separate hourly cost, but NAT Gateways, EC2, EBS, and unused Elastic IPs can cost money.
+- The Kubernetes `LoadBalancer` service had to be deleted and its classic ELB had to disappear before old EKS networking could be fully removed.
+- Local `actionlint` was not installed, so workflow verification used YAML parsing rather than a GitHub Actions semantic lint.
+
+Current next steps and risks:
+
+- Before relying on CI/CD, commit and push the current repo changes, then add `BACKEND_EC2_SSH_PRIVATE_KEY` as a GitHub Environment secret for `dev`. Optional environment variables are `BACKEND_EC2_HOST`, `BACKEND_EC2_USER`, and `BACKEND_EC2_REMOTE_ROOT`.
+- For backend-only CI/CD, run the `Deploy` workflow with `target: backend`, `environment: dev`, `unlock_deploy` checked, and `terraform_apply` unchecked.
+- The backend host is manually provisioned and single-instance. There is no high availability, TLS/domain setup, automated host replacement, monitoring, or backup plan yet.
+
 ## Lessons Already Learned
 
 - A `403` reading Terraform state usually means the GitHub Actions role lacks S3 permissions on the state bucket or object key.
 - Creating frontend S3 and CloudFront required adding S3 and CloudFront permissions to the GitHub Actions role.
 - Creating Cognito required adding `cognito-idp:*` permissions to the GitHub Actions role.
 - A broad Terraform `depends_on` between modules caused Terraform to think the frontend bucket needed replacement. Avoid broad module-level dependencies unless truly required.
-- Selecting `target: backend` while expecting Terraform infra changes will not apply infrastructure correctly. Use `target: infra` for Terraform.
-- A Cognito token that worked locally failed on EKS because `seamarg-backend-config` was missing, so the server pod had an empty `COGNITO_ISSUER_URI`. Manually creating the ConfigMap with `cognito-issuer-uri` fixed the running server. Terraform now owns this ConfigMap; import existing manual namespace/configmap resources once before applying in dev:
-
-```bash
-terraform -chdir=infra/terraform/environments/dev import module.backend_config.kubernetes_namespace_v1.backend seamarg
-terraform -chdir=infra/terraform/environments/dev import module.backend_config.kubernetes_config_map_v1.backend_config seamarg/seamarg-backend-config
-```
+- The retired EKS path had a failure mode where the backend pod used an empty `COGNITO_ISSUER_URI` when `seamarg-backend-config` was missing. On EC2, make the issuer an explicit container environment variable.
 
 - Local Terraform validation may fail with `ExpiredToken` if the AWS CLI session has expired. Refresh AWS credentials, verify with `aws sts get-caller-identity`, then rerun `terraform init`/`validate`.
 - Never store admin passwords, AWS access keys, kubeconfigs, or Terraform state in the repository.
