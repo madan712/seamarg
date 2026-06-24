@@ -60,7 +60,7 @@ class EndpointSecurityTests {
 		mockMvc.perform(get("/api/admin/hello")
 			.header(AdminPasswordAuthenticationFilter.ADMIN_PASSWORD_HEADER, "test-admin-password"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.message").value("Hello from the admin API"))
+			.andExpect(jsonPath("$.message").value("Hello from the test admin API"))
 			.andExpect(jsonPath("$.principal").value("test-admin"));
 	}
 }

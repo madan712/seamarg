@@ -132,7 +132,8 @@ Operational issues encountered and fixed:
 
 Current next steps and risks:
 
-- Before relying on CI/CD, commit and push the current repo changes, then add `BACKEND_EC2_SSH_PRIVATE_KEY` as a GitHub Environment secret for `dev`. Optional environment variables are `BACKEND_EC2_HOST`, `BACKEND_EC2_USER`, `BACKEND_EC2_REMOTE_ROOT`, and `BACKEND_EC2_SECURITY_GROUP_ID`.
+- As of the end-of-session save on June 24, 2026, the EC2 jar-only backend deploy and readiness retries were already present in `main` at commit `71f1966`. If a GitHub Actions run still behaves like the old workflow, confirm it is running this commit or newer.
+- Before relying on CI/CD, add `BACKEND_EC2_SSH_PRIVATE_KEY` as a GitHub Environment secret for `dev`. Optional environment variables are `BACKEND_EC2_HOST`, `BACKEND_EC2_USER`, `BACKEND_EC2_REMOTE_ROOT`, and `BACKEND_EC2_SECURITY_GROUP_ID`; if `BACKEND_EC2_HOST` is set, keep it pointed at the current EC2 DNS rather than the old `ec2-13-127-32-60.ap-south-1.compute.amazonaws.com` host.
 - For backend-only CI/CD, run the `Deploy` workflow with `target: backend`, `environment: dev`, `unlock_deploy` checked, and `terraform_apply` unchecked.
 - The backend host is manually provisioned and single-instance. There is no high availability, TLS/domain setup, automated host replacement, monitoring, or backup plan yet.
 - If GitHub Actions SSH fails with `connect to host ... port 22: Connection timed out`, check that the deployment role has EC2 security-group ingress permissions and that the temporary runner `/32` rule was added to `sg-0edcb8bd177aa82d4`.
