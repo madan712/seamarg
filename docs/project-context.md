@@ -59,7 +59,7 @@ GitHub Actions backend deployment requires the `BACKEND_EC2_SSH_PRIVATE_KEY` Git
 
 The backend EC2 security group is `sg-0edcb8bd177aa82d4`. SSH is not permanently open to GitHub because GitHub-hosted runner IPs change. The backend deploy workflow uses AWS OIDC credentials to temporarily authorize the runner's current `/32` IP on port `22`, deploys over SSH, and revokes that rule in an `always()` cleanup step.
 
-Backend deployment now uses `scripts/deploy-backend-ec2.sh`. The GitHub workflow builds `backend/build/libs/seamarg-backend.jar` before opening SSH. The script uploads the jar plus a small runtime Dockerfile to EC2, builds the runtime image on the server, removes/recreates the `seamarg-backend` container, and reuses the existing `/opt/seamarg/backend.env`. It deliberately changes ownership only under `/opt/seamarg/release` so the secret env file can stay protected.
+Backend deployment now uses `scripts/deploy-backend-ec2.sh`. The GitHub workflow builds `backend/build/libs/seamarg-backend.jar` before opening SSH. The script uploads the jar plus a small runtime Dockerfile to EC2, builds the runtime image on the server, removes/recreates the `seamarg-backend` container, waits for the local public endpoint to become ready, and reuses the existing `/opt/seamarg/backend.env`. It deliberately changes ownership only under `/opt/seamarg/release` so the secret env file can stay protected.
 
 The known dev Cognito issuer is `https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_7B41ZYOET`. Confirm it from Terraform before relying on it:
 
@@ -128,6 +128,7 @@ Operational issues encountered and fixed:
 - A backend CI deploy reached EC2 but failed with `client_loop: send disconnect: Broken pipe` while Docker was running a full Gradle build on the EC2 host. The fix was to move `./gradlew :backend:bootJar` into GitHub Actions and make the EC2 script upload the prebuilt jar, then build only a small runtime image remotely.
 - The old remote Gradle/Docker build left the `t3.micro` backend instance unresponsive to SSH and HTTP. A normal reboot did not recover it, but `stop-instances --force` followed by start recovered the instance and changed its public DNS from `ec2-13-127-32-60.ap-south-1.compute.amazonaws.com` to `ec2-13-233-83-132.ap-south-1.compute.amazonaws.com`.
 - After the stop/start recovery, the jar-only `scripts/deploy-backend-ec2.sh` path was verified manually against the new host and `/api/public/hello` returned successfully.
+- The GitHub backend smoke test once failed immediately after deploy with `curl: (7) Failed to connect ... port 80`; the container was healthy shortly afterward. The deploy script and workflow smoke test now wait/retry for backend readiness.
 
 Current next steps and risks:
 

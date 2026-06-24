@@ -270,7 +270,17 @@ jobs:
       - name: Smoke test backend
         run: |
           backend_host="${BACKEND_EC2_HOST:-ec2-13-233-83-132.ap-south-1.compute.amazonaws.com}"
-          curl -fsS "http://${backend_host}/api/public/hello"
+          for attempt in {1..30}; do
+            if curl -fsS --max-time 5 "http://${backend_host}/api/public/hello"; then
+              exit 0
+            fi
+
+            echo "Waiting for backend public endpoint (${attempt}/30)..."
+            sleep 2
+          done
+
+          echo "Backend public smoke test failed after 60 seconds." >&2
+          exit 1
 
       - name: Revoke runner SSH ingress
         if: ${{ always() && steps.ssh_ingress.outputs.authorized == 'true' }}

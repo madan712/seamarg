@@ -75,7 +75,7 @@ Optional GitHub Environment variables:
 
 The backend job temporarily authorizes the GitHub Actions runner's public `/32` IP for SSH on the backend EC2 security group, deploys over SSH, and then revokes that rule. The GitHub Actions AWS role therefore needs `ec2:AuthorizeSecurityGroupIngress`, `ec2:DescribeSecurityGroups`, and `ec2:RevokeSecurityGroupIngress`.
 
-The job builds `backend/build/libs/seamarg-backend.jar` on the GitHub runner before opening SSH. `scripts/deploy-backend-ec2.sh` uploads that jar to EC2, builds a small runtime image there, and restarts the container using the existing `/opt/seamarg/backend.env`.
+The job builds `backend/build/libs/seamarg-backend.jar` on the GitHub runner before opening SSH. `scripts/deploy-backend-ec2.sh` uploads that jar to EC2, builds a small runtime image there, restarts the container using the existing `/opt/seamarg/backend.env`, and waits for the local public endpoint to become ready before returning. The workflow public smoke test also retries briefly after deploy.
 
 To deploy from GitHub Actions, run the `Deploy` workflow with:
 

@@ -42,7 +42,7 @@ if command -v xattr >/dev/null 2>&1; then
   xattr -c "$archive_dir/Dockerfile" "$archive_dir/app.jar" 2>/dev/null || true
 fi
 
-COPYFILE_DISABLE=1 tar -czf "$archive" -C "$archive_dir" Dockerfile app.jar
+COPYFILE_DISABLE=1 tar --no-xattrs -czf "$archive" -C "$archive_dir" Dockerfile app.jar
 
 ssh_opts=(
   -i "$ssh_key"
@@ -89,4 +89,29 @@ sudo docker run -d \
   "$image_name"
 
 sudo docker ps --filter "name=$container_name" --format "{{.Names}} {{.Image}} {{.Status}} {{.Ports}}"
+
+ready=false
+for attempt in $(seq 1 30); do
+  if curl -fsS --max-time 3 "http://127.0.0.1:${host_port}/api/public/hello" >/dev/null; then
+    ready=true
+    break
+  fi
+
+  if ! sudo docker ps --filter "name=$container_name" --filter "status=running" --format "{{.Names}}" | grep -qx "$container_name"; then
+    echo "Backend container exited before becoming ready." >&2
+    sudo docker logs --tail 80 "$container_name" >&2 || true
+    exit 1
+  fi
+
+  echo "Waiting for backend readiness (${attempt}/30)..."
+  sleep 2
+done
+
+if [[ "$ready" != "true" ]]; then
+  echo "Backend did not become ready within 60 seconds." >&2
+  sudo docker logs --tail 80 "$container_name" >&2 || true
+  exit 1
+fi
+
+echo "Backend is ready."
 REMOTE_SCRIPT
