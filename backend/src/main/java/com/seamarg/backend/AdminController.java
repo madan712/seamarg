@@ -14,8 +14,8 @@ public class AdminController {
 	@GetMapping("/hello")
 	public AdminResponse hello(Authentication authentication) {
 		String principal = authentication.getName();
-		log.info("Handling admin hello request for principal={}", principal);
-		return new AdminResponse("Hello from the admin API", principal);
+		log.info("Handling test admin hello request for principal={}", principal);
+		return new AdminResponse("Hello from the test admin API", principal);
 	}
 
 	public record AdminResponse(String message, String principal) {
