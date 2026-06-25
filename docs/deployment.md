@@ -38,6 +38,18 @@ Required GitHub Environment or repository variables:
 
 Terraform creates a Cognito user pool for customer authentication, a browser-safe frontend app client, and a hosted UI domain. The frontend CloudFront URL is registered as a callback and logout URL. The dev stack also registers `http://localhost:5173` for local frontend development.
 
+The web frontend uses the browser-safe Cognito app client directly for sign-in, sign-up, email verification, and forgot-password flows. The client has no secret and is created by Terraform as the auth module's frontend app client. The frontend deployment workflow reads these Terraform outputs and injects them into the Vite build:
+
+- `VITE_COGNITO_USER_POOL_ID` from `cognito_user_pool_id`
+- `VITE_COGNITO_CLIENT_ID` from `cognito_app_client_id`
+
+For local frontend development, create `frontend/.env.local` from `frontend/.env.example` and fill those two values from:
+
+```bash
+terraform -chdir=infra/terraform/environments/dev output -raw cognito_user_pool_id
+terraform -chdir=infra/terraform/environments/dev output -raw cognito_app_client_id
+```
+
 To create or update only infrastructure, run the `Deploy` workflow with:
 
 - `target`: `infra`
