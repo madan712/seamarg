@@ -50,7 +50,6 @@ const appRoot = app;
 
 const storageKeys = {
   session: 'seamarg.auth.session',
-  postLoginPath: 'seamarg.auth.postLoginPath',
 };
 
 const runtimeConfig = (
@@ -239,11 +238,9 @@ function saveSession(session: AuthSession): void {
 
 function clearSession(): void {
   window.sessionStorage.removeItem(storageKeys.session);
-  window.sessionStorage.removeItem(storageKeys.postLoginPath);
 }
 
-function startLogin(postLoginPath = '/dashboard'): void {
-  window.sessionStorage.setItem(storageKeys.postLoginPath, postLoginPath);
+function startLogin(): void {
   authMode = 'signin';
   authNotice = '';
   setPath('/signin');
@@ -449,7 +446,6 @@ function renderApp(): void {
   }
 
   if (route.requiresAuth && !session) {
-    window.sessionStorage.setItem(storageKeys.postLoginPath, route.path);
     appRoot.innerHTML = renderLayout(session, renderAuthRequired(route.label));
     return;
   }
@@ -494,7 +490,7 @@ function renderLayout(session: AuthSession | null, page: string): string {
         }
       </div>
     </header>
-    <main>${page}</main>
+    <main class="site-main">${page}</main>
     <footer class="site-footer">
       <div>
         <strong>SeaMarg</strong>
@@ -683,12 +679,9 @@ function renderSignIn(): string {
       <div>
         <p class="eyebrow">Cognito account access</p>
         <h1>${authHeading()}</h1>
-        <p>
-          Create an account, verify your email code, reset a forgotten password, or sign in to continue to private SeaMarg pages.
-        </p>
+        <p>${authIntro()}</p>
       </div>
       <div class="auth-card auth-card-wide">
-        ${renderAuthTabs()}
         ${renderAuthNotice()}
         ${isCognitoConfigured() ? '' : renderMissingCognitoConfig()}
         ${renderAuthForm()}
@@ -713,34 +706,20 @@ function authHeading(): string {
   return 'Continue to SeaMarg.';
 }
 
-function renderAuthTabs(): string {
-  const tabs: Array<{ mode: AuthMode; label: string }> = [
-    { mode: 'signin', label: 'Sign in' },
-    { mode: 'signup', label: 'Create account' },
-    { mode: 'verify', label: 'Verify email' },
-    { mode: 'forgot', label: 'Forgot password' },
-  ];
-
-  return `
-    <div class="auth-tabs" role="tablist" aria-label="Cognito account options">
-      ${tabs
-        .map(
-          (tab) => `
-            <button
-              class="auth-tab"
-              type="button"
-              role="tab"
-              aria-selected="${authMode === tab.mode}"
-              data-action="set-auth-mode"
-              data-auth-mode="${tab.mode}"
-            >
-              ${escapeHtml(tab.label)}
-            </button>
-          `,
-        )
-        .join('')}
-    </div>
-  `;
+function authIntro(): string {
+  if (authMode === 'signup') {
+    return 'Create your SeaMarg account. Cognito will send a verification code to your email.';
+  }
+  if (authMode === 'verify') {
+    return 'Enter the verification code sent by Cognito to activate your account.';
+  }
+  if (authMode === 'forgot') {
+    return 'Enter your email and Cognito will send a password reset code.';
+  }
+  if (authMode === 'reset') {
+    return 'Use the reset code from your email and choose a new password.';
+  }
+  return 'Sign in to access your dashboard, profile, and private SeaMarg pages.';
 }
 
 function renderAuthNotice(): string {
@@ -780,7 +759,11 @@ function renderAuthForm(): string {
         ${inputField('password', 'Password', 'password', 'new-password', 12)}
         ${inputField('confirmPassword', 'Confirm password', 'password', 'new-password', 12)}
         <button class="button button-primary button-full" type="submit">Create account</button>
-        <p class="fine-print">Cognito will send a verification code to your email.</p>
+        <div class="auth-links">
+          <span>Already have an account?</span>
+          <button type="button" data-action="set-auth-mode" data-auth-mode="signin">Sign in</button>
+          <button type="button" data-action="set-auth-mode" data-auth-mode="verify">I have a verification code</button>
+        </div>
       </form>
     `;
   }
@@ -792,6 +775,10 @@ function renderAuthForm(): string {
         ${inputField('code', 'Verification code', 'text', 'one-time-code')}
         <button class="button button-primary button-full" type="submit">Verify email</button>
         <button class="button button-ghost button-full" type="button" data-action="resend-code">Resend code</button>
+        <div class="auth-links">
+          <button type="button" data-action="set-auth-mode" data-auth-mode="signin">Back to sign in</button>
+          <button type="button" data-action="set-auth-mode" data-auth-mode="signup">Create a new account</button>
+        </div>
       </form>
     `;
   }
@@ -801,6 +788,9 @@ function renderAuthForm(): string {
       <form class="auth-form" id="auth-forgot">
         ${inputField('email', 'Email', 'email', 'email', undefined, pendingEmail)}
         <button class="button button-primary button-full" type="submit">Send reset code</button>
+        <div class="auth-links">
+          <button type="button" data-action="set-auth-mode" data-auth-mode="signin">Back to sign in</button>
+        </div>
       </form>
     `;
   }
@@ -813,18 +803,37 @@ function renderAuthForm(): string {
         ${inputField('password', 'New password', 'password', 'new-password', 12)}
         ${inputField('confirmPassword', 'Confirm new password', 'password', 'new-password', 12)}
         <button class="button button-primary button-full" type="submit">Reset password</button>
+        <div class="auth-links">
+          <button type="button" data-action="set-auth-mode" data-auth-mode="signin">Back to sign in</button>
+        </div>
       </form>
     `;
   }
 
   return `
-    <form class="auth-form" id="auth-signin">
+    <form class="auth-form auth-form-signin" id="auth-signin">
+      <div class="auth-card-header">
+        <div>
+          <p class="auth-kicker">Secure access</p>
+          <h2>Sign in</h2>
+        </div>
+        <p class="auth-switch">
+          New user?
+          <button class="text-button" type="button" data-action="set-auth-mode" data-auth-mode="signup">Create account</button>
+        </p>
+      </div>
       ${inputField('email', 'Email', 'email', 'email', undefined, pendingEmail)}
-      ${inputField('password', 'Password', 'password', 'current-password')}
+      <label class="field">
+        <span class="field-label-row">
+          <span>Password</span>
+          <button class="field-action" type="button" data-action="set-auth-mode" data-auth-mode="forgot">Forgot password?</button>
+        </span>
+        <input name="password" type="password" autocomplete="current-password" required />
+      </label>
       <button class="button button-primary button-full" type="submit">Sign in</button>
-      <div class="auth-links">
-        <button type="button" data-action="set-auth-mode" data-auth-mode="signup">Create account</button>
-        <button type="button" data-action="set-auth-mode" data-auth-mode="forgot">Forgot password?</button>
+      <div class="auth-recovery">
+        <span>Verification email already sent?</span>
+        <button class="text-button" type="button" data-action="set-auth-mode" data-auth-mode="verify">Enter code</button>
       </div>
     </form>
   `;
@@ -1074,9 +1083,7 @@ async function handleAuthSubmit(form: HTMLFormElement): Promise<void> {
       saveSession(session);
       pendingEmail = '';
       pendingPasswordForAutoSignIn = '';
-      const postLoginPath = window.sessionStorage.getItem(storageKeys.postLoginPath) ?? '/dashboard';
-      window.sessionStorage.removeItem(storageKeys.postLoginPath);
-      replaceLocation(postLoginPath);
+      replaceLocation('/dashboard');
       renderApp();
       return;
     }
@@ -1195,7 +1202,7 @@ function handleClick(event: MouseEvent): void {
   }
 
   if (action === 'login') {
-    startLogin(getCurrentPath() === '/signin' ? '/dashboard' : getCurrentPath());
+    startLogin();
   }
 
   if (action === 'logout') {
