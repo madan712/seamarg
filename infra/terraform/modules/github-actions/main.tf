@@ -84,6 +84,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     actions = [
       "cloudfront:*",
       "cognito-idp:*",
+      "dynamodb:*",
       "ec2:AuthorizeSecurityGroupIngress",
       "ec2:DescribeSecurityGroups",
       "ec2:RevokeSecurityGroupIngress",
