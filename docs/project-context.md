@@ -30,7 +30,7 @@ Infrastructure is now managed only through the dev Terraform stack under `infra/
 
 Backend EKS deployment was retired on June 24, 2026 because infrastructure cost was too high for the expected initial traffic. The replacement is one Dockerized backend instance on a manually provided EC2 host. Terraform no longer contains EKS, ECR, or Kubernetes backend config modules.
 
-GitHub Actions deploys through OIDC using IAM role `arn:aws:iam::695663959248:role/seamarg-dev-github-actions`. Terraform manages that role through `infra/terraform/modules/github-actions`; permissions are scoped to S3, IAM, Cognito, CloudFront, EC2 security-group ingress for backend SSH deploys, and `sts:GetCallerIdentity` for the current dev infrastructure. The workflow is manually unlocked with:
+GitHub Actions deploys through OIDC using IAM role `arn:aws:iam::695663959248:role/seamarg-dev-github-actions`. Terraform manages that role through `infra/terraform/modules/github-actions`; permissions are scoped to S3, DynamoDB, IAM, Cognito, CloudFront, EC2 security-group ingress for backend SSH deploys, and `sts:GetCallerIdentity` for the current dev infrastructure. The workflow is manually unlocked with:
 
 - `environment`: usually `dev`
 - `target`: `backend`, `frontend`, `lambda`, `infra`, or `all`
@@ -38,6 +38,8 @@ GitHub Actions deploys through OIDC using IAM role `arn:aws:iam::695663959248:ro
 - `terraform_apply`: checked only when infrastructure should be applied
 
 Use `target: infra` with `terraform_apply` checked only for Terraform changes. Use `target: backend` with `terraform_apply` unchecked for normal backend-only EC2 Docker deploys.
+
+When `terraform_apply` is checked, the deploy workflow first applies `module.github_actions`, waits briefly for IAM propagation, refreshes the OIDC role session, then runs the full Terraform plan/apply. This avoids a failure mode where the role updates its own policy, such as adding DynamoDB permissions, and then immediately tries to use those new permissions in the same STS session.
 
 ## Backend Status
 

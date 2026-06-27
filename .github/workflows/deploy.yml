@@ -71,6 +71,7 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      FRONTEND_API_BASE_URL: ${{ vars.FRONTEND_API_BASE_URL }}
       TF_VAR_aws_region: ${{ vars.AWS_REGION }}
       TF_VAR_github_repository_full_name: ${{ github.repository }}
     steps:
@@ -82,6 +83,7 @@ jobs:
           test -n "$AWS_REGION" || { echo "Set AWS_REGION as a GitHub Environment or repository variable."; exit 1; }
           test -n "${{ vars.AWS_ROLE_TO_ASSUME }}" || { echo "Set AWS_ROLE_TO_ASSUME as a GitHub Environment or repository variable."; exit 1; }
           test -n "$TF_STATE_BUCKET" || { echo "Set TF_STATE_BUCKET as a GitHub Environment or repository variable."; exit 1; }
+          test -n "$FRONTEND_API_BASE_URL" || { echo "Set FRONTEND_API_BASE_URL as a GitHub Environment or repository variable."; exit 1; }
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -95,6 +97,20 @@ jobs:
 
       - name: Initialize Terraform
         run: terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} init -backend-config="bucket=${TF_STATE_BUCKET}" -backend-config="key=seamarg/${{ needs.guard.outputs.environment }}/terraform.tfstate" -backend-config="region=${AWS_REGION}"
+
+      - name: Apply deployment role permissions
+        run: terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} apply -auto-approve -input=false -target=module.github_actions
+
+      - name: Wait for IAM propagation
+        run: sleep 20
+
+      - name: Refresh AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          role-session-name: seamarg-terraform-refreshed-${{ github.run_id }}
+          unset-current-credentials: true
 
       - name: Plan Terraform
         run: terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} plan -input=false
@@ -171,7 +187,7 @@ jobs:
         env:
           VITE_COGNITO_USER_POOL_ID: ${{ steps.frontend_infra.outputs.cognito_user_pool_id }}
           VITE_COGNITO_CLIENT_ID: ${{ steps.frontend_infra.outputs.cognito_app_client_id }}
-          VITE_API_BASE_URL: ${{ vars.FRONTEND_API_BASE_URL }}
+          VITE_API_BASE_URL: ${{ env.FRONTEND_API_BASE_URL }}
         run: npm run build -w frontend
 
       - name: Deploy frontend

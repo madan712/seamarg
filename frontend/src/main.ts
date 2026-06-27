@@ -92,13 +92,12 @@ const runtimeConfig = (
 ).__SEAMARG_CONFIG__;
 
 const config: AppConfig = {
-  cognitoUserPoolId:
-    import.meta.env.VITE_COGNITO_USER_POOL_ID ?? runtimeConfig?.cognitoUserPoolId ?? '',
-  cognitoClientId:
-    import.meta.env.VITE_COGNITO_CLIENT_ID ?? runtimeConfig?.cognitoClientId ?? '',
-  apiBaseUrl: stripTrailingSlash(
-    import.meta.env.VITE_API_BASE_URL ?? runtimeConfig?.apiBaseUrl ?? 'http://localhost:8080',
+  cognitoUserPoolId: firstConfigValue(
+    import.meta.env.VITE_COGNITO_USER_POOL_ID,
+    runtimeConfig?.cognitoUserPoolId,
   ),
+  cognitoClientId: firstConfigValue(import.meta.env.VITE_COGNITO_CLIENT_ID, runtimeConfig?.cognitoClientId),
+  apiBaseUrl: resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL, runtimeConfig?.apiBaseUrl),
 };
 
 let authMode: AuthMode = 'signin';
@@ -229,6 +228,24 @@ const faqItems = [
 
 function stripTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
+}
+
+function firstConfigValue(...values: Array<string | undefined>): string {
+  return values.find((value) => typeof value === 'string' && value.trim())?.trim() ?? '';
+}
+
+function resolveApiBaseUrl(...values: Array<string | undefined>): string {
+  const configuredValue = firstConfigValue(...values);
+
+  if (configuredValue) {
+    return stripTrailingSlash(configuredValue);
+  }
+
+  return isLocalBrowser() ? 'http://localhost:8080' : '';
+}
+
+function isLocalBrowser(): boolean {
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 }
 
 function getCurrentPath(): string {
@@ -1500,6 +1517,12 @@ async function apiRequest<T>(
   session: AuthSession,
   init: RequestInit = {},
 ): Promise<T> {
+  if (!config.apiBaseUrl) {
+    throw new Error(
+      'Backend API URL is not configured for this deployment. Set FRONTEND_API_BASE_URL to the backend origin and redeploy the frontend.',
+    );
+  }
+
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${session.accessToken}`);
 
@@ -1516,6 +1539,18 @@ async function apiRequest<T>(
 
   if (!response.ok) {
     throw new Error(await readApiError(response));
+  }
+
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+
+  if (!contentType.includes('application/json')) {
+    const body = await response.text();
+    const looksLikeHtml = body.trimStart().startsWith('<');
+    throw new Error(
+      looksLikeHtml
+        ? 'Backend API returned the frontend HTML page instead of JSON. Check FRONTEND_API_BASE_URL points to the backend, not the CloudFront/frontend URL.'
+        : `Backend API returned ${contentType || 'an unknown content type'} instead of JSON.`,
+    );
   }
 
   return (await response.json()) as T;
