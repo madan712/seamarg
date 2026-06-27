@@ -19,7 +19,7 @@ variable "aws_region" {
 variable "github_repository_full_name" {
   description = "GitHub repository in owner/name format. Set by GitHub Actions using github.repository."
   type        = string
-  default     = null
+  default     = "madan712/seamarg"
 }
 
 variable "github_oidc_subjects" {

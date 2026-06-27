@@ -5,7 +5,7 @@
 - `backend` is a Spring Boot Java service managed by Gradle.
 - `frontend` is a TypeScript/Vite web app.
 - `lambda` is a TypeScript AWS Lambda placeholder for future functions.
-- `infra/terraform` contains dev infrastructure-as-code for S3, CloudFront, Cognito, GitHub Actions IAM, and future Lambda infrastructure.
+- `infra/terraform` contains dev infrastructure-as-code for S3, CloudFront, Cognito, DynamoDB, backend runtime IAM, GitHub Actions IAM, and future Lambda infrastructure.
 - `.github/workflows` contains CI and manually unlocked deployment workflows.
 
 ## Local development
@@ -179,13 +179,22 @@ SEAMARG_ADMIN_USERNAME=admin
 SEAMARG_ADMIN_PASSWORD=<admin-password>
 SEAMARG_ADMIN_ROLE=ADMIN
 COGNITO_ISSUER_URI=<terraform-output-cognito_issuer_uri>
+SEAMARG_AWS_REGION=ap-south-1
+AWS_REGION=ap-south-1
+SEAMARG_DOCUMENT_BUCKET=<terraform-output-documents_bucket_name>
+SEAMARG_APP_DATA_TABLE=<terraform-output-app_data_table_name>
 ```
 
-Keep `SEAMARG_ADMIN_PASSWORD` out of Git and Terraform state. The Cognito issuer still comes from the dev Terraform output:
+Keep `SEAMARG_ADMIN_PASSWORD` out of Git and Terraform state. The Cognito issuer and certificate storage names come from dev Terraform outputs:
 
 ```bash
 terraform -chdir=infra/terraform/environments/dev output -raw cognito_issuer_uri
+terraform -chdir=infra/terraform/environments/dev output -raw documents_bucket_name
+terraform -chdir=infra/terraform/environments/dev output -raw app_data_table_name
+terraform -chdir=infra/terraform/environments/dev output -raw backend_ec2_instance_profile_name
 ```
+
+The backend EC2 instance should use instance profile `seamarg-dev-backend-ec2`, managed by Terraform module `infra/terraform/modules/backend-runtime`. Do not put long-lived AWS access keys in `/opt/seamarg/backend.env`.
 
 On the EC2 host, keep those values in `/opt/seamarg/backend.env` with `600` permissions. To build the backend jar locally and restart the backend container after code changes:
 

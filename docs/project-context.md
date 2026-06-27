@@ -28,6 +28,8 @@ The active AWS region is `ap-south-1`. The known dev AWS account is `69566395924
 
 Infrastructure is now managed only through the dev Terraform stack under `infra/terraform/environments/dev` and reusable modules under `infra/terraform/modules`. The unused staging and prod Terraform stacks were removed; CI and deploy workflows now expose only `dev` as an environment choice.
 
+Treat Terraform as the source of truth for infrastructure. Do not make AWS infrastructure changes manually unless an urgent production unblock requires it; if a manual change is made, codify it in Terraform and import/adopt it into state in the same session before closing.
+
 Backend EKS deployment was retired on June 24, 2026 because infrastructure cost was too high for the expected initial traffic. The replacement is one Dockerized backend instance on a manually provided EC2 host. Terraform no longer contains EKS, ECR, or Kubernetes backend config modules.
 
 GitHub Actions deploys through OIDC using IAM role `arn:aws:iam::695663959248:role/seamarg-dev-github-actions`. Terraform manages that role through `infra/terraform/modules/github-actions`; permissions are scoped to S3, DynamoDB, IAM, Cognito, CloudFront, EC2 security-group ingress for backend SSH deploys, and `sts:GetCallerIdentity` for the current dev infrastructure. The workflow is manually unlocked with:
@@ -40,6 +42,8 @@ GitHub Actions deploys through OIDC using IAM role `arn:aws:iam::695663959248:ro
 Use `target: infra` with `terraform_apply` checked only for Terraform changes. Use `target: backend` with `terraform_apply` unchecked for normal backend-only EC2 Docker deploys.
 
 When `terraform_apply` is checked, the deploy workflow first applies `module.github_actions`, waits briefly for IAM propagation, refreshes the OIDC role session, then runs the full Terraform plan/apply. This avoids a failure mode where the role updates its own policy, such as adding DynamoDB permissions, and then immediately tries to use those new permissions in the same STS session.
+
+The dev Terraform variable `github_repository_full_name` defaults to `madan712/seamarg` so local Terraform plans do not treat the GitHub Actions OIDC role as disabled. GitHub Actions still passes the repository explicitly as `TF_VAR_github_repository_full_name`.
 
 ## Backend Status
 
@@ -72,9 +76,11 @@ Certificate/storage environment variables:
 - `SEAMARG_OPENAI_MODEL`, default `gpt-5.5`
 - `SEAMARG_CORS_ALLOWED_ORIGINS`, comma-separated browser origins allowed to call `/api/**`
 
-On EC2, provide these environment variables to the backend Docker container directly or through a host-local secret file that is not committed. `COGNITO_ISSUER_URI` should continue to come from the Terraform-created Cognito user pool. Attach the Terraform output `backend_runtime_data_policy_arn` to the backend runtime role or EC2 instance profile before relying on S3/DynamoDB access; if the manually provisioned EC2 instance has no instance profile, create/attach one rather than committing AWS access keys.
+On EC2, provide these environment variables to the backend Docker container directly or through a host-local secret file that is not committed. `COGNITO_ISSUER_URI` should continue to come from the Terraform-created Cognito user pool. Attach the Terraform output `backend_runtime_data_policy_arn` to the backend runtime role or EC2 instance profile before relying on S3/DynamoDB access; do not commit or place long-lived AWS access keys in `/opt/seamarg/backend.env`.
 
-The current dev backend EC2 host is `ec2-13-233-83-132.ap-south-1.compute.amazonaws.com`, connecting as `ec2-user` with the local key at `/Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem`. It runs Amazon Linux 2023 with Docker enabled. The instance ID is `i-04e02dc88bcc372b3`. The backend container is named `seamarg-backend`, uses image `seamarg-backend:latest`, maps host port `80` to container port `8080`, and uses restart policy `unless-stopped`. Runtime environment variables live on the server at `/opt/seamarg/backend.env` with `600` permissions and must not be committed or printed.
+The current dev backend EC2 host is `ec2-13-233-83-132.ap-south-1.compute.amazonaws.com`, connecting as `ec2-user` with the local key at `/Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem`. It runs Amazon Linux 2023 with Docker enabled. The instance ID is `i-04e02dc88bcc372b3`. The backend container is named `seamarg-backend`, uses image `seamarg-backend:latest`, maps host port `80` to container port `8080`, and uses restart policy `unless-stopped`. Runtime environment variables live on the server at `/opt/seamarg/backend.env` with `600` permissions and must not be committed or printed. As of June 27, 2026, the file includes `SEAMARG_AWS_REGION=ap-south-1`, `AWS_REGION=ap-south-1`, `SEAMARG_DOCUMENT_BUCKET=seamarg-dev-certificates-695663959248`, and `SEAMARG_APP_DATA_TABLE=seamarg-dev-app-data`.
+
+The dev backend EC2 instance profile is `arn:aws:iam::695663959248:instance-profile/seamarg-dev-backend-ec2`, with role `arn:aws:iam::695663959248:role/seamarg-dev-backend-ec2`. Terraform now manages this role/profile through `infra/terraform/modules/backend-runtime` and imports the manually created dev resources through `infra/terraform/environments/dev/imports.tf`. The role has the Terraform-created policy `arn:aws:iam::695663959248:policy/seamarg-dev-backend-runtime-data` attached, allowing the backend to access the private certificate bucket and generic DynamoDB table. If the backend EC2 instance is replaced manually, attach instance profile `seamarg-dev-backend-ec2` to the new instance.
 
 GitHub Actions backend deployment requires the `BACKEND_EC2_SSH_PRIVATE_KEY` GitHub Environment secret. Optional variables are `BACKEND_EC2_HOST`, `BACKEND_EC2_USER`, `BACKEND_EC2_REMOTE_ROOT`, and `BACKEND_EC2_SECURITY_GROUP_ID`; defaults match the current dev host and security group.
 
@@ -94,6 +100,7 @@ Useful certificate storage output checks after Terraform apply:
 terraform -chdir=infra/terraform/environments/dev output -raw documents_bucket_name
 terraform -chdir=infra/terraform/environments/dev output -raw app_data_table_name
 terraform -chdir=infra/terraform/environments/dev output -raw backend_runtime_data_policy_arn
+terraform -chdir=infra/terraform/environments/dev output -raw backend_ec2_instance_profile_name
 ```
 
 Useful backend checks:
@@ -137,6 +144,7 @@ Terraform creates:
 - A private certificate/document S3 bucket.
 - A generic backend DynamoDB table.
 - A backend runtime IAM policy for the document bucket and app data table.
+- A backend EC2 runtime role and instance profile that attach the backend runtime data policy.
 
 The frontend S3 bucket uses Terraform `prevent_destroy`. If a plan wants to delete or replace the bucket, stop and inspect the environment, region, and dependency graph before applying.
 
@@ -147,6 +155,27 @@ Route 53/domain setup is intentionally deferred. For now, access the frontend us
 Terraform creates the customer Cognito user pool, frontend app client, and hosted UI domain. The current frontend uses embedded Cognito User Pool forms through the app client rather than redirecting to the hosted UI. Customer backend endpoints are designed to validate JWT tokens using `COGNITO_ISSUER_URI`.
 
 Native Cognito email sign-up is the current baseline. Google/Gmail social login is future work and will require adding a Google identity provider, client ID/secret handling, and supported identity providers in Terraform.
+
+## June 27, 2026 Session Notes
+
+Certificate upload/list/view now works locally and from the deployed CloudFront frontend. Durable operational lessons from this session:
+
+- Browser console error `Mixed Content: ... requested an insecure resource http://ec2-.../api/customer/certificates` was caused by the HTTPS CloudFront frontend calling the HTTP EC2 backend directly. The deployed frontend now calls same-origin `https://<cloudfront>/api/*`, and CloudFront forwards `/api/*` to the HTTP EC2 backend origin.
+- Terraform initially failed to update CloudFront with `NoSuchCachePolicy` when the API behavior referenced AWS managed cache policy ID `4135ea2d-6df8-44a3-9df8-4b5a84be39ad`. The fix was to create a stack-owned `aws_cloudfront_cache_policy.backend_api` with zero TTL and use it on `/api/*`.
+- After mixed-content was fixed, the server showed no certificate rows because the EC2 backend container lacked `SEAMARG_DOCUMENT_BUCKET` and `SEAMARG_APP_DATA_TABLE`; the backend fell back to in-memory certificate metadata. `/opt/seamarg/backend.env` was updated on EC2 with the non-secret storage env keys, the Docker container was recreated, and the server then read the same DynamoDB rows as local.
+- The EC2 instance originally had no IAM instance profile. A backend runtime role/profile named `seamarg-dev-backend-ec2` was created, attached to the Terraform-created policy `seamarg-dev-backend-runtime-data`, associated to instance `i-04e02dc88bcc372b3`, then codified and imported into Terraform through `infra/terraform/modules/backend-runtime` and `infra/terraform/environments/dev/imports.tf`.
+- `terraform apply` adopted the manual backend runtime IAM resources with `3 imported, 0 added, 2 changed, 0 destroyed`; a follow-up `terraform plan` reported `No changes`.
+
+Lightweight checks that worked:
+
+```bash
+AWS_PROFILE=personal AWS_REGION=ap-south-1 terraform -chdir=infra/terraform/environments/dev validate
+AWS_PROFILE=personal AWS_REGION=ap-south-1 terraform -chdir=infra/terraform/environments/dev plan -input=false -no-color
+AWS_PROFILE=personal AWS_REGION=ap-south-1 terraform -chdir=infra/terraform/environments/dev apply -input=false -auto-approve -no-color
+curl -fsS http://ec2-13-233-83-132.ap-south-1.compute.amazonaws.com/api/public/hello
+AWS_PROFILE=personal AWS_REGION=ap-south-1 aws ec2 describe-instances --instance-ids i-04e02dc88bcc372b3 --query 'Reservations[0].Instances[0].IamInstanceProfile.Arn' --output text
+AWS_PROFILE=personal AWS_REGION=ap-south-1 aws iam list-attached-role-policies --role-name seamarg-dev-backend-ec2 --query 'AttachedPolicies[].PolicyArn' --output text
+```
 
 ## June 24, 2026 Session Notes
 
@@ -196,4 +225,5 @@ Current next steps and risks:
 - The retired EKS path had a failure mode where the backend pod used an empty `COGNITO_ISSUER_URI` when `seamarg-backend-config` was missing. On EC2, make the issuer an explicit container environment variable.
 
 - Local Terraform validation may fail with `ExpiredToken` if the AWS CLI session has expired. Refresh AWS credentials, verify with `aws sts get-caller-identity`, then rerun `terraform init`/`validate`.
+- An EC2 backend can upload to S3 but still show empty certificate lists if DynamoDB persistence is not configured; verify `SEAMARG_APP_DATA_TABLE`, `SEAMARG_DOCUMENT_BUCKET`, and the EC2 instance profile before debugging frontend state.
 - Never store admin passwords, AWS access keys, kubeconfigs, or Terraform state in the repository.

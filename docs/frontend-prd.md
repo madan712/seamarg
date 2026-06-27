@@ -2,7 +2,7 @@
 
 Status: Living draft for product review and implementation tracking
 Owner: Product/Engineering  
-Last updated: 2026-06-26
+Last updated: 2026-06-27
 Primary sources: `SEA MARG.doc`, `SEA MARG DEV.doc`, `SEA MARG.doc.pptx`
 
 ## 1. Product Summary
@@ -143,7 +143,7 @@ The client documents discuss mobile apps, OTP login, n8n, WhatsApp, PostgreSQL, 
 
 This PRD should be kept current as features are implemented. When a new feature is built and it is not already captured here, update the relevant requirements, acceptance criteria, release phase, and this tracker before closing the session.
 
-Last implementation update: 2026-06-26
+Last implementation update: 2026-06-27
 
 Implemented in the current frontend:
 
@@ -155,7 +155,8 @@ Implemented in the current frontend:
 - Dashboard and Profile are intentionally blank/private shells for now.
 - Certificates route has an authenticated upload form, API-backed certificate table, expiry/status indicators, and protected view/download flow through backend-generated short-lived document URLs.
 - Local frontend environment template and dev environment support for Cognito user pool ID, app client ID, and API base URL.
-- Dev deployment workflow injects Cognito frontend values from Terraform outputs during the frontend build.
+- Dev deployment workflow injects Cognito frontend values and the CloudFront same-origin API base URL from Terraform outputs during the frontend build.
+- Deployed certificate API calls use the frontend CloudFront `/api/*` proxy, avoiding HTTPS-to-HTTP mixed-content blocking in the browser.
 
 Remaining or deferred:
 
@@ -163,7 +164,7 @@ Remaining or deferred:
 - Profile, AI guidance, career path, advice history, support, and contact backend APIs.
 - Certificate missing-document checklist, reminders/notifications, retention controls, and malware scanning.
 - Real support/contact submission channel.
-- HTTPS backend API endpoint and production-ready CORS before deployed frontend API calls are considered complete.
+- Direct backend HTTPS/custom-domain API endpoint and production CORS strategy; current dev deployment uses CloudFront same-origin `/api/*` proxying.
 - WhatsApp, mobile OTP, n8n workflows, payments, company/institute portals, and admin governance tools.
 
 ## 8. Branding and Messaging
@@ -375,7 +376,7 @@ Required configuration:
 
 - `VITE_COGNITO_USER_POOL_ID`
 - `VITE_COGNITO_CLIENT_ID`
-- `VITE_API_BASE_URL`
+- `VITE_API_BASE_URL`; for dev deployment this is injected from Terraform output `frontend_api_base_url`, and for local development it should point at `http://localhost:8080`.
 
 Product note:
 
@@ -670,6 +671,7 @@ Current repo reality:
 
 - Cognito is already set up for customer auth.
 - Backend has test/demo public and customer APIs plus authenticated certificate upload/list/download-url APIs.
+- Dev frontend API calls are routed through the same CloudFront origin at `/api/*`, which forwards to the current HTTP EC2 backend origin.
 - Contact/support, profile, AI query, subscriptions, jobs, and WhatsApp APIs are not implemented.
 
 Frontend implication:
@@ -681,7 +683,7 @@ Frontend implication:
 
 ## 17. Production Infrastructure Risks
 
-The current frontend is hosted via HTTPS CloudFront. The current backend context describes an HTTP EC2 endpoint. Browser calls from HTTPS frontend to the raw HTTP backend are blocked as mixed content, so deployed API calls should go through the CloudFront `/api/*` behavior until the backend has HTTPS directly.
+The current frontend is hosted via HTTPS CloudFront. The current backend context describes an HTTP EC2 endpoint. Browser calls from HTTPS frontend to the raw HTTP backend are blocked as mixed content, so deployed API calls go through the CloudFront `/api/*` behavior until the backend has HTTPS directly.
 
 Before production API features are considered complete:
 
@@ -689,7 +691,7 @@ Before production API features are considered complete:
 - Backend CORS must allow localhost development origins; deployed same-origin CloudFront API calls do not rely on browser CORS.
 - `VITE_API_BASE_URL` must be environment-specific when bypassing the same-origin CloudFront API proxy.
 - Contact/support data submission path must be approved.
-- Certificate upload storage now uses a private Terraform-managed S3 bucket and a generic DynamoDB table; production hardening still needs malware scanning, retention rules, AWS runtime IAM attachment, and operational backup/restore review.
+- Certificate upload storage now uses a private Terraform-managed S3 bucket, a generic DynamoDB table, and a Terraform-managed backend EC2 runtime role/profile in dev; production hardening still needs malware scanning, retention rules, and operational backup/restore review.
 
 ## 18. UX and Visual Direction
 
@@ -783,6 +785,8 @@ Accessibility:
 - Successful login redirects to Dashboard.
 - Protected dashboard requires authentication.
 - Dashboard remains a blank/private shell until product content and APIs are approved.
+- Certificates page can upload, list, and open private documents through authenticated backend APIs.
+- Deployed certificate API calls do not trigger browser mixed-content errors.
 - Sign out clears local session and returns user to public state.
 - No admin password, token, or secret is exposed in frontend code.
 - No unsupported claim says SeaMarg is official, licensed as a manning agent, or able to guarantee sign-on/job outcomes.

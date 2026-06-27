@@ -34,6 +34,14 @@ module "data" {
   environment  = var.environment
 }
 
+module "backend_runtime" {
+  source = "../../modules/backend-runtime"
+
+  project_name                    = var.project_name
+  environment                     = var.environment
+  backend_runtime_data_policy_arn = module.data.backend_runtime_policy_arn
+}
+
 module "lambda" {
   source      = "../../modules/lambda"
   environment = var.environment

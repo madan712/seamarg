@@ -97,3 +97,18 @@ output "backend_runtime_data_policy_arn" {
   description = "IAM policy ARN to attach to the backend runtime role or EC2 instance profile."
   value       = module.data.backend_runtime_policy_arn
 }
+
+output "backend_ec2_runtime_role_arn" {
+  description = "IAM role ARN used by the backend EC2 runtime."
+  value       = module.backend_runtime.role_arn
+}
+
+output "backend_ec2_instance_profile_name" {
+  description = "IAM instance profile name to attach to the backend EC2 instance."
+  value       = module.backend_runtime.instance_profile_name
+}
+
+output "backend_ec2_instance_profile_arn" {
+  description = "IAM instance profile ARN associated with the backend EC2 runtime."
+  value       = module.backend_runtime.instance_profile_arn
+}
