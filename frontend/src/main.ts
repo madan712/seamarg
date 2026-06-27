@@ -972,9 +972,10 @@ function renderCertificates(session: AuthSession | null): string {
       </aside>
       <section class="private-main certificate-page" id="certificate-page">
         <div class="private-title certificate-title-row">
-          <div>
+          <div class="certificate-title-copy">
             <p class="eyebrow">Private</p>
             <h1>Certificates</h1>
+            <p class="certificate-subtitle">Documents, expiry dates, and review status in one workspace.</p>
           </div>
           <button class="button button-ghost" type="button" data-action="refresh-certificates" ${
             certificatesState.loading ? 'disabled' : ''
@@ -989,15 +990,26 @@ function renderCertificates(session: AuthSession | null): string {
         </div>
 
         <form class="certificate-upload" id="certificate-upload-form">
-          <label class="field certificate-file-field">
-            <span>Certificate or document</span>
+          <div class="certificate-upload-copy">
+            <label id="certificate-file-label" for="certificate-file">Certificate or document</label>
+            <span id="certificate-file-hint">PDF, image, text, or Word document</span>
+          </div>
+          <div class="certificate-upload-control">
             <input
+              class="certificate-file-input"
+              id="certificate-file"
               name="file"
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.txt,.doc,.docx,application/pdf,image/*,text/plain"
+              aria-labelledby="certificate-file-label"
+              aria-describedby="certificate-file-hint"
               required
             />
-          </label>
+            <label class="certificate-file-picker" for="certificate-file">
+              <span class="certificate-file-button">Choose file</span>
+              <span class="certificate-file-name" data-file-name>No file selected</span>
+            </label>
+          </div>
           <button class="button button-primary" type="submit" ${certificatesState.uploading ? 'disabled' : ''}>
             ${certificatesState.uploading ? 'Uploading...' : 'Upload'}
           </button>
@@ -1334,6 +1346,17 @@ function bindCurrentPage(session: AuthSession | null): void {
   const certificatePage = document.querySelector<HTMLElement>('#certificate-page');
 
   if (certificatePage && session) {
+    const fileInput = certificatePage.querySelector<HTMLInputElement>('#certificate-file');
+    const fileName = certificatePage.querySelector<HTMLElement>('[data-file-name]');
+
+    if (fileInput && fileName) {
+      fileInput.addEventListener('change', () => {
+        const selectedFile = fileInput.files?.[0];
+        fileName.textContent = selectedFile?.name ?? 'No file selected';
+        fileName.title = selectedFile?.name ?? '';
+      });
+    }
+
     void loadCertificates(session);
   }
 }
