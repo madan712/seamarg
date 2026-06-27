@@ -681,13 +681,13 @@ Frontend implication:
 
 ## 17. Production Infrastructure Risks
 
-The current frontend is hosted via HTTPS CloudFront. The current backend context describes an HTTP EC2 endpoint. Browser calls from HTTPS frontend to HTTP backend can be blocked as mixed content.
+The current frontend is hosted via HTTPS CloudFront. The current backend context describes an HTTP EC2 endpoint. Browser calls from HTTPS frontend to the raw HTTP backend are blocked as mixed content, so deployed API calls should go through the CloudFront `/api/*` behavior until the backend has HTTPS directly.
 
 Before production API features are considered complete:
 
 - Backend API needs HTTPS.
-- Backend CORS must allow the deployed frontend origin and localhost development origin.
-- `VITE_API_BASE_URL` must be environment-specific.
+- Backend CORS must allow localhost development origins; deployed same-origin CloudFront API calls do not rely on browser CORS.
+- `VITE_API_BASE_URL` must be environment-specific when bypassing the same-origin CloudFront API proxy.
 - Contact/support data submission path must be approved.
 - Certificate upload storage now uses a private Terraform-managed S3 bucket and a generic DynamoDB table; production hardening still needs malware scanning, retention rules, AWS runtime IAM attachment, and operational backup/restore review.
 

@@ -1,8 +1,9 @@
 module "frontend" {
   source = "../../modules/frontend"
 
-  project_name = var.project_name
-  environment  = var.environment
+  project_name                   = var.project_name
+  environment                    = var.environment
+  backend_api_origin_domain_name = var.backend_api_origin_domain_name
 }
 
 module "github_actions" {

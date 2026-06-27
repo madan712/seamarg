@@ -127,7 +127,6 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      FRONTEND_API_BASE_URL: ${{ vars.FRONTEND_API_BASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -137,7 +136,6 @@ jobs:
           test -n "$AWS_REGION" || { echo "Set AWS_REGION as a GitHub Environment or repository variable."; exit 1; }
           test -n "${{ vars.AWS_ROLE_TO_ASSUME }}" || { echo "Set AWS_ROLE_TO_ASSUME as a GitHub Environment or repository variable."; exit 1; }
           test -n "$TF_STATE_BUCKET" || { echo "Set TF_STATE_BUCKET as a GitHub Environment or repository variable."; exit 1; }
-          test -n "$FRONTEND_API_BASE_URL" || { echo "Set FRONTEND_API_BASE_URL as a GitHub Environment or repository variable."; exit 1; }
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -165,12 +163,19 @@ jobs:
           fi
           cloudfront_distribution_id="$(terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} output -raw frontend_cloudfront_distribution_id)"
           cloudfront_domain_name="$(terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} output -raw frontend_cloudfront_domain_name)"
+          : > "$output_error"
+          if ! frontend_api_base_url="$(terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} output -raw frontend_api_base_url 2>"$output_error")"; then
+            cat "$output_error"
+            echo "Frontend API proxy output is missing. Re-run this workflow with terraform_apply checked for ${{ needs.guard.outputs.environment }} first." >&2
+            exit 1
+          fi
           cognito_user_pool_id="$(terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} output -raw cognito_user_pool_id)"
           cognito_app_client_id="$(terraform -chdir=infra/terraform/environments/${{ needs.guard.outputs.environment }} output -raw cognito_app_client_id)"
 
           echo "bucket_name=${bucket_name}" >> "$GITHUB_OUTPUT"
           echo "cloudfront_distribution_id=${cloudfront_distribution_id}" >> "$GITHUB_OUTPUT"
           echo "cloudfront_domain_name=${cloudfront_domain_name}" >> "$GITHUB_OUTPUT"
+          echo "frontend_api_base_url=${frontend_api_base_url}" >> "$GITHUB_OUTPUT"
           echo "cognito_user_pool_id=${cognito_user_pool_id}" >> "$GITHUB_OUTPUT"
           echo "cognito_app_client_id=${cognito_app_client_id}" >> "$GITHUB_OUTPUT"
 
@@ -187,7 +192,7 @@ jobs:
         env:
           VITE_COGNITO_USER_POOL_ID: ${{ steps.frontend_infra.outputs.cognito_user_pool_id }}
           VITE_COGNITO_CLIENT_ID: ${{ steps.frontend_infra.outputs.cognito_app_client_id }}
-          VITE_API_BASE_URL: ${{ env.FRONTEND_API_BASE_URL }}
+          VITE_API_BASE_URL: ${{ steps.frontend_infra.outputs.frontend_api_base_url }}
         run: npm run build -w frontend
 
       - name: Deploy frontend

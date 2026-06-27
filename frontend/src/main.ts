@@ -241,7 +241,7 @@ function resolveApiBaseUrl(...values: Array<string | undefined>): string {
     return stripTrailingSlash(configuredValue);
   }
 
-  return isLocalBrowser() ? 'http://localhost:8080' : '';
+  return isLocalBrowser() ? 'http://localhost:8080' : window.location.origin;
 }
 
 function isLocalBrowser(): boolean {
@@ -1519,7 +1519,7 @@ async function apiRequest<T>(
 ): Promise<T> {
   if (!config.apiBaseUrl) {
     throw new Error(
-      'Backend API URL is not configured for this deployment. Set FRONTEND_API_BASE_URL to the backend origin and redeploy the frontend.',
+      'Backend API URL is not configured for this deployment. Set VITE_API_BASE_URL or use the CloudFront /api proxy and redeploy the frontend.',
     );
   }
 
@@ -1548,7 +1548,7 @@ async function apiRequest<T>(
     const looksLikeHtml = body.trimStart().startsWith('<');
     throw new Error(
       looksLikeHtml
-        ? 'Backend API returned the frontend HTML page instead of JSON. Check FRONTEND_API_BASE_URL points to the backend, not the CloudFront/frontend URL.'
+        ? 'Backend API returned the frontend HTML page instead of JSON. Check the CloudFront /api behavior points to the backend origin.'
         : `Backend API returned ${contentType || 'an unknown content type'} instead of JSON.`,
     );
   }

@@ -1,7 +1,10 @@
 locals {
-  name         = "${var.project_name}-${var.environment}"
-  bucket_name  = lower("${local.name}-frontend-${data.aws_caller_identity.current.account_id}")
-  s3_origin_id = "${local.name}-frontend-s3"
+  name                   = "${var.project_name}-${var.environment}"
+  bucket_name            = lower("${local.name}-frontend-${data.aws_caller_identity.current.account_id}")
+  s3_origin_id           = "${local.name}-frontend-s3"
+  api_origin_domain_name = trimspace(coalesce(var.backend_api_origin_domain_name, ""))
+  api_origin_enabled     = local.api_origin_domain_name != ""
+  api_origin_id          = "${local.name}-backend-api"
 
   common_tags = merge(
     {
@@ -16,6 +19,8 @@ locals {
 
   # AWS managed cache policy: Managed-CachingOptimized.
   cloudfront_cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  # AWS managed cache policy: Managed-CachingDisabled.
+  cloudfront_api_cache_policy_id = "4135ea2d-6df8-44a3-9df8-4b5a84be39ad"
 }
 
 data "aws_caller_identity" "current" {}
@@ -68,6 +73,25 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_cloudfront_origin_request_policy" "backend_api" {
+  count = local.api_origin_enabled ? 1 : 0
+
+  name    = "${local.name}-backend-api-origin-request"
+  comment = "Forward viewer request details to the ${local.name} backend API"
+
+  cookies_config {
+    cookie_behavior = "all"
+  }
+
+  headers_config {
+    header_behavior = "allViewer"
+  }
+
+  query_strings_config {
+    query_string_behavior = "all"
+  }
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   is_ipv6_enabled     = true
@@ -82,6 +106,22 @@ resource "aws_cloudfront_distribution" "frontend" {
     origin_id                = local.s3_origin_id
   }
 
+  dynamic "origin" {
+    for_each = local.api_origin_enabled ? [local.api_origin_domain_name] : []
+
+    content {
+      domain_name = origin.value
+      origin_id   = local.api_origin_id
+
+      custom_origin_config {
+        http_port              = 80
+        https_port             = 443
+        origin_protocol_policy = "http-only"
+        origin_ssl_protocols   = ["TLSv1.2"]
+      }
+    }
+  }
+
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
@@ -89,6 +129,21 @@ resource "aws_cloudfront_distribution" "frontend" {
     compress               = true
     target_origin_id       = local.s3_origin_id
     viewer_protocol_policy = "redirect-to-https"
+  }
+
+  dynamic "ordered_cache_behavior" {
+    for_each = local.api_origin_enabled ? [1] : []
+
+    content {
+      allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+      cached_methods           = ["GET", "HEAD", "OPTIONS"]
+      cache_policy_id          = local.cloudfront_api_cache_policy_id
+      compress                 = true
+      origin_request_policy_id = aws_cloudfront_origin_request_policy.backend_api[0].id
+      path_pattern             = "/api/*"
+      target_origin_id         = local.api_origin_id
+      viewer_protocol_policy   = "redirect-to-https"
+    }
   }
 
   custom_error_response {

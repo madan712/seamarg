@@ -28,6 +28,11 @@ output "cloudfront_domain_name" {
   value       = aws_cloudfront_distribution.frontend.domain_name
 }
 
+output "api_base_url" {
+  description = "HTTPS API base URL exposed through the frontend CloudFront distribution."
+  value       = local.api_origin_enabled ? "https://${aws_cloudfront_distribution.frontend.domain_name}" : null
+}
+
 output "cloudfront_hosted_zone_id" {
   description = "CloudFront hosted zone ID for a future Route 53 alias record."
   value       = aws_cloudfront_distribution.frontend.hosted_zone_id

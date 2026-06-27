@@ -23,6 +23,11 @@ output "frontend_cloudfront_domain_name" {
   value       = module.frontend.cloudfront_domain_name
 }
 
+output "frontend_api_base_url" {
+  description = "HTTPS API base URL exposed through the frontend CloudFront distribution."
+  value       = module.frontend.api_base_url
+}
+
 output "frontend_cloudfront_hosted_zone_id" {
   description = "CloudFront hosted zone ID for a future Route 53 alias record."
   value       = module.frontend.cloudfront_hosted_zone_id

@@ -121,6 +121,8 @@ The AWS provider currently validates this table with a deprecation warning for `
 
 The frontend is deployed by the pipeline by building `frontend/dist`, syncing static files to a private S3 bucket, and invalidating CloudFront.
 
+CloudFront proxies `/api/*` to the dev backend EC2 origin `ec2-13-233-83-132.ap-south-1.compute.amazonaws.com` over HTTP. The browser calls the same HTTPS CloudFront origin, which avoids mixed-content failures from the HTTPS frontend trying to call the raw HTTP EC2 host. The deployed frontend build uses Terraform output `frontend_api_base_url` for `VITE_API_BASE_URL`; local development can continue using `http://localhost:8080`.
+
 As of June 26, 2026, the frontend is a vanilla TypeScript/Vite SPA with hash routing. It includes public Home, About, Help/FAQ, Contact, and Support pages; embedded Cognito User Pool forms for sign in, sign up, email verification, resend code, forgot password, and reset password; protected Dashboard, Profile, Certificates, Ask SeaMarg AI, Career Path, and Account routes; and a blank Dashboard shell as the post-login landing page.
 
 Successful Cognito login redirects to `#/dashboard`. Dashboard and Profile are intentionally blank/private shells for now until product content and backend APIs are approved. The Certificates route now uploads documents to the backend, lists certificate metadata, shows extracted document/rank/expiry status, and opens uploaded documents through protected download URL requests.
@@ -130,6 +132,7 @@ Terraform creates:
 - A private frontend S3 bucket.
 - S3 public access block and bucket policy.
 - CloudFront distribution.
+- CloudFront `/api/*` behavior forwarding API requests and auth headers to the backend EC2 origin.
 - CloudFront Origin Access Control so only CloudFront can read S3 objects.
 - A private certificate/document S3 bucket.
 - A generic backend DynamoDB table.

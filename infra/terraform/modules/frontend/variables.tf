@@ -26,6 +26,20 @@ variable "cloudfront_price_class" {
   }
 }
 
+variable "backend_api_origin_domain_name" {
+  description = "Optional backend API origin domain name for CloudFront /api/* proxying. Use the domain only, without http:// or a path."
+  type        = string
+  default     = null
+
+  validation {
+    condition = var.backend_api_origin_domain_name == null ? true : (
+      trimspace(var.backend_api_origin_domain_name) == "" ||
+      can(regex("^[^/:]+$", trimspace(var.backend_api_origin_domain_name)))
+    )
+    error_message = "backend_api_origin_domain_name must be a domain name only, for example ec2-13-233-83-132.ap-south-1.compute.amazonaws.com."
+  }
+}
+
 variable "tags" {
   description = "Additional tags for frontend resources."
   type        = map(string)
