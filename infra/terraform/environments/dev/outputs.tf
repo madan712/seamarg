@@ -67,3 +67,28 @@ output "cognito_logout_urls" {
   description = "Logout URLs registered with the Cognito frontend app client."
   value       = module.auth.logout_urls
 }
+
+output "documents_bucket_name" {
+  description = "Private S3 bucket for uploaded certificate and document files."
+  value       = module.data.documents_bucket_name
+}
+
+output "documents_bucket_arn" {
+  description = "ARN of the private documents bucket."
+  value       = module.data.documents_bucket_arn
+}
+
+output "app_data_table_name" {
+  description = "Generic DynamoDB table name for backend application records."
+  value       = module.data.app_data_table_name
+}
+
+output "app_data_table_arn" {
+  description = "ARN of the generic backend application data table."
+  value       = module.data.app_data_table_arn
+}
+
+output "backend_runtime_data_policy_arn" {
+  description = "IAM policy ARN to attach to the backend runtime role or EC2 instance profile."
+  value       = module.data.backend_runtime_policy_arn
+}

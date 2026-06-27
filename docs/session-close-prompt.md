@@ -14,10 +14,16 @@ Please perform an end-of-session context save for this repository.
    - commands that worked
    - errors encountered and how they were fixed
    - current next steps or known risks
-4. Keep the context concise and useful for a future Codex chat.
-5. Do not save secrets, passwords, AWS access keys, kubeconfigs, .env values, Terraform state contents, or private tokens.
-6. If README.md, AGENTS.md, or another docs file should point to the updated context, update that too.
-7. Run only lightweight verification needed for docs, then summarize exactly which files changed.
+4. Update docs/frontend-prd.md as the living product record:
+   - Compare the session changes against the PRD.
+   - If a feature was implemented and is missing from the PRD, add it to the relevant requirements, acceptance criteria, and release phase.
+   - If implementation behavior differs from the PRD, either update the PRD to match the approved direction or add an open product question.
+   - Update the implementation tracker with what is done, what remains, and what is deferred.
+   - Keep product claims aligned with client-provided material; do not invent official approvals, partnerships, or capabilities.
+5. Keep the context concise and useful for a future Codex chat.
+6. Do not save secrets, passwords, AWS access keys, kubeconfigs, .env values, Terraform state contents, or private tokens.
+7. If README.md, AGENTS.md, or another docs file should point to the updated context, update that too.
+8. Run only lightweight verification needed for docs, then summarize exactly which files changed.
 
 Do not commit or push unless I explicitly ask.
 ```

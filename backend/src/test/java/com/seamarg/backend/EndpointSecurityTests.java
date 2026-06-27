@@ -2,6 +2,7 @@ package com.seamarg.backend;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(properties = {
@@ -42,6 +44,34 @@ class EndpointSecurityTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.message").value("Hello from the customer API"))
 			.andExpect(jsonPath("$.subject").value("customer-123"));
+	}
+
+	@Test
+	void customerCertificateListRequiresJwt() throws Exception {
+		mockMvc.perform(get("/api/customer/certificates")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void customerCertificateListAllowsJwtAccess() throws Exception {
+		mockMvc.perform(get("/api/customer/certificates").with(jwt().jwt(token -> token.subject("customer-123"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$").isArray());
+	}
+
+	@Test
+	void customerCertificateUploadNeedsConfiguredStorage() throws Exception {
+		var certificate = new MockMultipartFile(
+			"file",
+			"medical-fitness-certificate.txt",
+			"text/plain",
+			"Medical Fitness Certificate valid until 31/12/2027".getBytes());
+
+		mockMvc.perform(multipart("/api/customer/certificates")
+				.file(certificate)
+				.with(jwt().jwt(token -> token.subject("customer-123"))))
+			.andExpect(status().isServiceUnavailable())
+			.andExpect(jsonPath("$.message").value(
+				"Certificate document storage is not configured. Set SEAMARG_DOCUMENT_BUCKET for the backend."));
 	}
 
 	@Test

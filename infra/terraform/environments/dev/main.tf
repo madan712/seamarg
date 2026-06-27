@@ -26,6 +26,13 @@ module "auth" {
   include_localhost_callback_urls = true
 }
 
+module "data" {
+  source = "../../modules/data"
+
+  project_name = var.project_name
+  environment  = var.environment
+}
+
 module "lambda" {
   source      = "../../modules/lambda"
   environment = var.environment

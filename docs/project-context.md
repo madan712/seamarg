@@ -8,6 +8,8 @@ At the end of long Codex sessions, use `docs/session-close-prompt.md` to update 
 
 `AGENTS.md` directs future contributors and Codex chats to read this file before making infrastructure, security, or pipeline changes. Use `docs/session-close-prompt.md` before closing long sessions so new architecture decisions, AWS resource names, deployment lessons, and known risks are preserved here.
 
+`docs/frontend-prd.md` is the living frontend product record. Whenever a frontend feature is implemented, compare the change against the PRD before closing the session. If the feature is missing, add it to the relevant requirements, acceptance criteria, release phase, and implementation tracker so future chats can see what is done, what remains, and what is deferred.
+
 Do not commit or push during a context-save pass unless the user explicitly asks for it.
 
 ## Current Architecture
@@ -45,13 +47,30 @@ The backend has three endpoint categories:
 - Customer: `/api/customer/**`, protected by AWS Cognito JWTs.
 - Admin: `/api/admin/**`, protected by static password header `X-Admin-Password`.
 
+As of June 26, 2026, the backend also exposes authenticated customer certificate APIs:
+
+- `GET /api/customer/certificates`: list the signed-in user's uploaded certificate records.
+- `POST /api/customer/certificates`: upload a certificate/document file, store the file in S3, extract metadata with OpenAI when `OPENAI_API_KEY` is configured, fall back to local merchant-navy document/rank pattern extraction, and save metadata to DynamoDB.
+- `GET /api/customer/certificates/{certificateId}/download-url`: return a short-lived private S3 presigned URL for view/download.
+
 Admin credentials are configured through environment variables:
 
 - `SEAMARG_ADMIN_USERNAME`, default `admin`
 - `SEAMARG_ADMIN_PASSWORD`, no default password
 - `SEAMARG_ADMIN_ROLE`, default `ADMIN`, mapped to Spring authority `ROLE_ADMIN`
 
-On EC2, provide these environment variables to the backend Docker container directly or through a host-local secret file that is not committed. `COGNITO_ISSUER_URI` should continue to come from the Terraform-created Cognito user pool.
+Certificate/storage environment variables:
+
+- `SEAMARG_AWS_REGION`, default `ap-south-1`
+- `SEAMARG_DOCUMENT_BUCKET`, required for real certificate uploads
+- `SEAMARG_APP_DATA_TABLE`, required for persistent certificate metadata
+- `SEAMARG_CERTIFICATE_MAX_UPLOAD_BYTES`, default `10485760`
+- `SEAMARG_CERTIFICATE_DOWNLOAD_URL_TTL_SECONDS`, default `300`
+- `OPENAI_API_KEY`, optional; when absent the backend uses local extraction only
+- `SEAMARG_OPENAI_MODEL`, default `gpt-5.5`
+- `SEAMARG_CORS_ALLOWED_ORIGINS`, comma-separated browser origins allowed to call `/api/**`
+
+On EC2, provide these environment variables to the backend Docker container directly or through a host-local secret file that is not committed. `COGNITO_ISSUER_URI` should continue to come from the Terraform-created Cognito user pool. Attach the Terraform output `backend_runtime_data_policy_arn` to the backend runtime role or EC2 instance profile before relying on S3/DynamoDB access; if the manually provisioned EC2 instance has no instance profile, create/attach one rather than committing AWS access keys.
 
 The current dev backend EC2 host is `ec2-13-233-83-132.ap-south-1.compute.amazonaws.com`, connecting as `ec2-user` with the local key at `/Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem`. It runs Amazon Linux 2023 with Docker enabled. The instance ID is `i-04e02dc88bcc372b3`. The backend container is named `seamarg-backend`, uses image `seamarg-backend:latest`, maps host port `80` to container port `8080`, and uses restart policy `unless-stopped`. Runtime environment variables live on the server at `/opt/seamarg/backend.env` with `600` permissions and must not be committed or printed.
 
@@ -67,6 +86,14 @@ The known dev Cognito issuer is `https://cognito-idp.ap-south-1.amazonaws.com/ap
 terraform -chdir=infra/terraform/environments/dev output -raw cognito_issuer_uri
 ```
 
+Useful certificate storage output checks after Terraform apply:
+
+```bash
+terraform -chdir=infra/terraform/environments/dev output -raw documents_bucket_name
+terraform -chdir=infra/terraform/environments/dev output -raw app_data_table_name
+terraform -chdir=infra/terraform/environments/dev output -raw backend_runtime_data_policy_arn
+```
+
 Useful backend checks:
 
 ```bash
@@ -78,9 +105,23 @@ ssh -i /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem ec2-user@ec2-13-23
 
 The old dev EKS cluster was named `seamarg-dev-eks`, with backend namespace `seamarg`, service `seamarg-backend`, ECR repo `seamarg-dev-backend`, VPC `vpc-0a104403d9d102d07`, and classic ELB `a7967211d441d405abd01f15c17995ff`. These resources were deleted on June 24, 2026. A post-cleanup Terraform plan reported no changes, and Terraform state no longer contains backend/EKS/ECR/VPC/Kubernetes resources.
 
+## Data Storage Status
+
+Terraform now includes `infra/terraform/modules/data` for backend application data. In dev it creates:
+
+- Private S3 documents bucket named like `seamarg-dev-certificates-<account-id>` with public access blocked, bucket-owner-enforced ownership, AES256 encryption, versioning, incomplete multipart cleanup, and `prevent_destroy`.
+- Generic DynamoDB table named `seamarg-dev-app-data` using `pk` and `sk` plus `gsi1Pk`/`gsi1Sk` for a reusable single-table pattern. Certificate records use `pk=USER#<cognito-sub>` and `sk=CERTIFICATE#<certificate-id>`.
+- IAM policy output `backend_runtime_data_policy_arn` granting the backend S3 object access and DynamoDB item access for this storage.
+
+The AWS provider currently validates this table with a deprecation warning for `hash_key`/`range_key`, but the installed provider version rejects the suggested `key_schema` block syntax. Keep the valid syntax until the provider docs and installed version align.
+
 ## Frontend Status
 
 The frontend is deployed by the pipeline by building `frontend/dist`, syncing static files to a private S3 bucket, and invalidating CloudFront.
+
+As of June 26, 2026, the frontend is a vanilla TypeScript/Vite SPA with hash routing. It includes public Home, About, Help/FAQ, Contact, and Support pages; embedded Cognito User Pool forms for sign in, sign up, email verification, resend code, forgot password, and reset password; protected Dashboard, Profile, Certificates, Ask SeaMarg AI, Career Path, and Account routes; and a blank Dashboard shell as the post-login landing page.
+
+Successful Cognito login redirects to `#/dashboard`. Dashboard and Profile are intentionally blank/private shells for now until product content and backend APIs are approved. The Certificates route now uploads documents to the backend, lists certificate metadata, shows extracted document/rank/expiry status, and opens uploaded documents through protected download URL requests.
 
 Terraform creates:
 
@@ -88,6 +129,9 @@ Terraform creates:
 - S3 public access block and bucket policy.
 - CloudFront distribution.
 - CloudFront Origin Access Control so only CloudFront can read S3 objects.
+- A private certificate/document S3 bucket.
+- A generic backend DynamoDB table.
+- A backend runtime IAM policy for the document bucket and app data table.
 
 The frontend S3 bucket uses Terraform `prevent_destroy`. If a plan wants to delete or replace the bucket, stop and inspect the environment, region, and dependency graph before applying.
 
@@ -95,7 +139,7 @@ Route 53/domain setup is intentionally deferred. For now, access the frontend us
 
 ## Cognito Status
 
-Terraform creates the customer Cognito user pool, frontend app client, and hosted UI domain. Customer endpoints are designed to validate JWT tokens using `COGNITO_ISSUER_URI`.
+Terraform creates the customer Cognito user pool, frontend app client, and hosted UI domain. The current frontend uses embedded Cognito User Pool forms through the app client rather than redirecting to the hosted UI. Customer backend endpoints are designed to validate JWT tokens using `COGNITO_ISSUER_URI`.
 
 Native Cognito email sign-up is the current baseline. Google/Gmail social login is future work and will require adding a Google identity provider, client ID/secret handling, and supported identity providers in Terraform.
 

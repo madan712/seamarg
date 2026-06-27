@@ -1,8 +1,8 @@
 # SeaMarg Frontend PRD
 
-Status: Draft for product review  
+Status: Living draft for product review and implementation tracking
 Owner: Product/Engineering  
-Last updated: 2026-06-25  
+Last updated: 2026-06-26
 Primary sources: `SEA MARG.doc`, `SEA MARG DEV.doc`, `SEA MARG.doc.pptx`
 
 ## 1. Product Summary
@@ -126,19 +126,45 @@ The current repo contains:
 
 - Static Vite/TypeScript frontend.
 - Spring Boot backend with public, customer, and admin test endpoints.
-- Terraform-managed Cognito Hosted UI for customer authentication.
+- Terraform-managed Cognito User Pool and frontend app client for customer authentication.
 - S3/CloudFront frontend hosting.
 
 The first frontend implementation should focus on a web MVP:
 
 - Public SeaMarg marketing and trust pages.
-- Cognito login/logout.
-- Auth callback handling.
+- Embedded Cognito login/logout, sign-up, email verification, and password reset.
 - Protected seafarer dashboard shell.
 - Static or API-ready UI for profile, certificate, AI guidance, and support.
 - Clear empty states where product APIs are not yet built.
 
 The client documents discuss mobile apps, OTP login, n8n, WhatsApp, PostgreSQL, AI workflows, and multiple backend APIs. Those are product direction and should be captured as future phases unless the backend scope is expanded.
+
+### 7.1 Implementation Tracker
+
+This PRD should be kept current as features are implemented. When a new feature is built and it is not already captured here, update the relevant requirements, acceptance criteria, release phase, and this tracker before closing the session.
+
+Last implementation update: 2026-06-26
+
+Implemented in the current frontend:
+
+- Public routes: Home, About, Help/FAQ, Contact, and Support.
+- Professional public layout, navigation, responsive styling, and footer.
+- Embedded Cognito User Pool forms for sign in, account creation, email verification code entry, resend verification code, forgot password, and reset password.
+- Protected routes for Dashboard, Profile, Certificates, Ask SeaMarg AI, Career Path, and Account.
+- Successful login redirects to Dashboard.
+- Dashboard and Profile are intentionally blank/private shells for now.
+- Certificates route has an authenticated upload form, API-backed certificate table, expiry/status indicators, and protected view/download flow through backend-generated short-lived document URLs.
+- Local frontend environment template and dev environment support for Cognito user pool ID, app client ID, and API base URL.
+- Dev deployment workflow injects Cognito frontend values from Terraform outputs during the frontend build.
+
+Remaining or deferred:
+
+- Real dashboard content and backend-driven profile completion.
+- Profile, AI guidance, career path, advice history, support, and contact backend APIs.
+- Certificate missing-document checklist, reminders/notifications, retention controls, and malware scanning.
+- Real support/contact submission channel.
+- HTTPS backend API endpoint and production-ready CORS before deployed frontend API calls are considered complete.
+- WhatsApp, mobile OTP, n8n workflows, payments, company/institute portals, and admin governance tools.
 
 ## 8. Branding and Messaging
 
@@ -333,32 +359,40 @@ User request for this repo: use Cognito for frontend login.
 
 Required behavior:
 
-- Sign in/sign up through Cognito Hosted UI.
-- Use OAuth authorization code flow with PKCE.
-- Request `openid email profile` scopes.
-- Handle callback route.
+- Sign in through the embedded Cognito User Pool form.
+- Create a new account through the embedded Cognito sign-up form.
+- Send Cognito email verification for new users.
+- Allow users to enter the verification code and confirm their email.
+- Allow users to request and enter a password reset code.
+- Use the Cognito frontend app client with SRP-based username/password authentication.
 - Store session safely for SPA constraints.
-- Support logout through Cognito logout URL.
+- Redirect successful sign-in to Dashboard.
+- Support logout by clearing the local SPA session.
 - Redirect unauthenticated users away from protected pages.
-- Handle missing config, expired code, failed callback, and cancelled login.
+- Handle missing config, failed sign-in, unverified email, expired/incorrect codes, and failed reset flows.
 
 Required configuration:
 
-- `VITE_COGNITO_HOSTED_UI_BASE_URL`
+- `VITE_COGNITO_USER_POOL_ID`
 - `VITE_COGNITO_CLIENT_ID`
-- `VITE_COGNITO_REDIRECT_URI`
-- `VITE_COGNITO_LOGOUT_URI`
 - `VITE_API_BASE_URL`
 
 Product note:
 
-- Client docs mention mobile OTP and WhatsApp onboarding. That should be treated as a future auth/onboarding track unless the product owner decides to replace or extend Cognito.
+- Client docs mention mobile OTP and WhatsApp onboarding. That should be treated as a future auth/onboarding track unless the product owner decides to replace or extend the current Cognito form flow.
 
 ### 11.2 Dashboard
 
 Purpose: First protected landing page after login.
 
 Required content for MVP:
+
+- Current agreed MVP behavior: keep the post-login Dashboard blank for now.
+- Dashboard is the landing page after successful login.
+- Dashboard must remain protected by the auth guard.
+- Future content should be added only when product direction and backend APIs are approved.
+
+Future content:
 
 - Welcome message using Cognito profile/email where available.
 - SeaMarg advisory disclaimer.
@@ -368,9 +402,6 @@ Required content for MVP:
 - Career path card.
 - Support/scam report CTA.
 - API connectivity check to `/api/customer/hello` while product APIs are pending.
-
-Future content:
-
 - Profile strength score.
 - Expiring document alerts.
 - Recent AI advice.
@@ -432,12 +463,17 @@ Required UI concepts:
 - Expiry status: valid, expiring, expired.
 - 90/60/30 day reminder concept.
 - Missing document warning.
-- Future upload area for PDF/image OCR.
+- Upload area for certificate/document files.
+- AI extraction results for document name, rank, expiry date, issuer, certificate number, and review confidence when available.
+- Protected view/download action for uploaded documents.
 
 Acceptance criteria:
 
-- MVP can show sample/empty state if certificate backend is unavailable.
-- No real file upload until storage, privacy, scanning, and backend API decisions are made.
+- Certificates page loads records from protected customer APIs and shows an honest empty or error state.
+- Uploads are sent to the backend only after Cognito login.
+- Uploaded files are stored privately in S3 and metadata is stored in the generic backend DynamoDB table.
+- The frontend never stores raw documents locally and opens documents only through backend-generated short-lived URLs.
+- Malware scanning, retention policy, and reminder delivery remain deferred production hardening items.
 
 ### 11.5 Ask SeaMarg AI
 
@@ -633,8 +669,8 @@ The DEV document proposes these future API groups:
 Current repo reality:
 
 - Cognito is already set up for customer auth.
-- Backend has only test/demo public and customer APIs.
-- Contact/support, profile, certificates, AI query, subscriptions, jobs, and WhatsApp APIs are not implemented.
+- Backend has test/demo public and customer APIs plus authenticated certificate upload/list/download-url APIs.
+- Contact/support, profile, AI query, subscriptions, jobs, and WhatsApp APIs are not implemented.
 
 Frontend implication:
 
@@ -653,7 +689,7 @@ Before production API features are considered complete:
 - Backend CORS must allow the deployed frontend origin and localhost development origin.
 - `VITE_API_BASE_URL` must be environment-specific.
 - Contact/support data submission path must be approved.
-- File upload/storage strategy must be approved before certificates are uploaded.
+- Certificate upload storage now uses a private Terraform-managed S3 bucket and a generic DynamoDB table; production hardening still needs malware scanning, retention rules, AWS runtime IAM attachment, and operational backup/restore review.
 
 ## 18. UX and Visual Direction
 
@@ -688,19 +724,19 @@ Accessibility:
 ### Phase 1: Professional Web MVP
 
 - Home, About, Help/FAQ, Contact, Support.
-- Cognito sign in/sign up/logout.
-- Auth callback and protected route guard.
-- Seafarer dashboard shell.
+- Embedded Cognito sign in, sign up, email verification, password reset, and logout.
+- Protected route guard.
+- Blank seafarer dashboard shell as the post-login landing page.
 - Account page.
-- Profile, Certificates, Ask SeaMarg AI, Career Path, and Advice History as API-ready pages or coming-soon/empty states.
+- Certificates upload/list/view experience.
+- Profile, Ask SeaMarg AI, Career Path, and Advice History as API-ready pages or coming-soon/empty states.
 - Clear advisory, non-manning-agent, and trust copy.
 - Build and typecheck passing.
 
 ### Phase 2: Real Seafarer Data
 
 - Backend profile APIs.
-- Certificate APIs.
-- Certificate expiry UI.
+- Certificate missing-document checklist and reminder delivery.
 - Notification preferences.
 - Real support/contact submission.
 - HTTPS/CORS production API readiness.
@@ -740,10 +776,13 @@ Accessibility:
 - About page includes brand meaning, mission, and advisory boundaries.
 - FAQ page includes DG Shipping, AI, scam safety, compliance, and account topics.
 - Contact and Support forms validate inputs and show honest submission behavior.
-- Sign-in uses Cognito Hosted UI.
-- Auth callback handles success and failure.
+- Sign-in uses the embedded Cognito User Pool form.
+- Sign-up sends Cognito email verification.
+- Users can verify email with a Cognito code.
+- Users can request and complete forgot-password reset.
+- Successful login redirects to Dashboard.
 - Protected dashboard requires authentication.
-- Dashboard shows useful product direction without fake persisted data.
+- Dashboard remains a blank/private shell until product content and APIs are approved.
 - Sign out clears local session and returns user to public state.
 - No admin password, token, or secret is exposed in frontend code.
 - No unsupported claim says SeaMarg is official, licensed as a manning agent, or able to guarantee sign-on/job outcomes.
@@ -765,9 +804,9 @@ Accessibility:
 
 Recommended frontend approach:
 
-- Use React or another component framework if approved, because the frontend is moving from a placeholder to a multi-page authenticated app.
-- Use a lightweight router.
-- Use a proven OIDC/OAuth client for Cognito authorization code with PKCE.
+- Current implementation uses a vanilla TypeScript/Vite SPA with hash routing.
+- Consider React or another component framework later only if the product surface becomes complex enough to justify migration.
+- Use Cognito User Pool app-client authentication for the current embedded form flow.
 - Keep product content in typed data structures where possible, especially FAQ and feature content.
 - Create reusable layout, navigation, form, status, and protected-route components.
 - Keep API calls isolated behind small service modules.

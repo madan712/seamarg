@@ -3,6 +3,7 @@ package com.seamarg.backend.security;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -14,6 +15,11 @@ import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.util.StringUtils;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
@@ -25,9 +31,11 @@ public class SecurityConfig {
 		var adminAuthority = AdminSecurityProperties.authorityFromRole(adminRole);
 
 		return http.csrf(AbstractHttpConfigurer::disable)
+			.cors(Customizer.withDefaults())
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests(authorize -> authorize
 				.requestMatchers("/api/public/**", "/api/hello", "/actuator/health/**", "/actuator/info").permitAll()
+				.requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
 				.requestMatchers("/api/customer/**").authenticated()
 				.requestMatchers("/api/admin/**").hasAuthority(adminAuthority)
 				.anyRequest().denyAll())
@@ -45,5 +53,23 @@ public class SecurityConfig {
 		return token -> {
 			throw new JwtException("Customer JWT issuer is not configured.");
 		};
+	}
+
+	@Bean
+	CorsConfigurationSource corsConfigurationSource(
+			@Value("${seamarg.cors.allowed-origins:}") String allowedOrigins) {
+		var configuration = new CorsConfiguration();
+		configuration.setAllowedOrigins(Arrays.stream(allowedOrigins.split(","))
+			.map(String::trim)
+			.filter(StringUtils::hasText)
+			.toList());
+		configuration.setAllowedMethods(Arrays.asList("GET", "POST", "OPTIONS"));
+		configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
+		configuration.setExposedHeaders(Arrays.asList("Location"));
+		configuration.setMaxAge(3600L);
+
+		var source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/api/**", configuration);
+		return source;
 	}
 }

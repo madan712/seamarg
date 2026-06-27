@@ -32,6 +32,39 @@ type AuthMode = 'signin' | 'signup' | 'verify' | 'forgot' | 'reset';
 
 type NoticeKind = 'info' | 'success' | 'warning' | 'error';
 
+type CertificateRecord = {
+  certificateId: string;
+  originalFilename: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  updatedAt: string;
+  processingStatus: 'ANALYZING' | 'ANALYZED' | 'REVIEW_REQUIRED' | string;
+  documentName?: string | null;
+  documentCategory?: string | null;
+  rank?: string | null;
+  expiryDate?: string | null;
+  issuer?: string | null;
+  certificateNumber?: string | null;
+  confidence?: number | null;
+  extractionSource?: string | null;
+  extractionNotes?: string | null;
+};
+
+type DownloadUrlResponse = {
+  url: string;
+  expiresAt: string;
+};
+
+type CertificatesState = {
+  items: CertificateRecord[];
+  loading: boolean;
+  uploading: boolean;
+  loadedForSubject: string | null;
+  notice: string;
+  noticeKind: NoticeKind;
+};
+
 type Route = {
   path: string;
   label: string;
@@ -73,6 +106,25 @@ let authNotice = '';
 let authNoticeKind: NoticeKind = 'info';
 let pendingEmail = '';
 let pendingPasswordForAutoSignIn = '';
+let certificatesState: CertificatesState = {
+  items: [],
+  loading: false,
+  uploading: false,
+  loadedForSubject: null,
+  notice: '',
+  noticeKind: 'info',
+};
+
+function resetCertificateState(): void {
+  certificatesState = {
+    items: [],
+    loading: false,
+    uploading: false,
+    loadedForSubject: null,
+    notice: '',
+    noticeKind: 'info',
+  };
+}
 
 const publicRoutes: Route[] = [
   { path: '/', label: 'Home', render: renderHome, nav: 'public' },
@@ -101,7 +153,7 @@ const privateRoutes: Route[] = [
   {
     path: '/certificates',
     label: 'Certificates',
-    render: () => renderPrivatePage('Certificates'),
+    render: renderCertificates,
     nav: 'private',
     requiresAuth: true,
   },
@@ -405,6 +457,7 @@ function signOut(): void {
   }
 
   clearSession();
+  resetCertificateState();
   setPath('/');
   renderApp();
 }
@@ -451,7 +504,7 @@ function renderApp(): void {
   }
 
   appRoot.innerHTML = renderLayout(session, route.render(session));
-  bindCurrentPage();
+  bindCurrentPage(session);
 }
 
 function renderLayout(session: AuthSession | null, page: string): string {
@@ -879,6 +932,232 @@ function renderPrivatePage(title: string): string {
   `;
 }
 
+function renderCertificates(session: AuthSession | null): string {
+  if (!session) {
+    return renderAuthRequired('Certificates');
+  }
+
+  const subject = claimToString(session.claims.sub) ?? 'signed-in-user';
+  const items = certificatesState.loadedForSubject === subject ? certificatesState.items : [];
+  const totalCount = items.length;
+  const expiringCount = items.filter((item) => getExpiryStatus(item.expiryDate).kind === 'expiring').length;
+  const expiredCount = items.filter((item) => getExpiryStatus(item.expiryDate).kind === 'expired').length;
+  const reviewCount = items.filter((item) => item.processingStatus === 'REVIEW_REQUIRED').length;
+
+  return `
+    <section class="private-shell">
+      <aside class="private-sidebar">
+        <p class="eyebrow">Seafarer portal</p>
+        ${privateRoutes
+          .filter((route) => route.nav === 'private')
+          .map((route) => navLink(route.path, route.label))
+          .join('')}
+      </aside>
+      <section class="private-main certificate-page" id="certificate-page">
+        <div class="private-title certificate-title-row">
+          <div>
+            <p class="eyebrow">Private</p>
+            <h1>Certificates</h1>
+          </div>
+          <button class="button button-ghost" type="button" data-action="refresh-certificates" ${
+            certificatesState.loading ? 'disabled' : ''
+          }>Refresh</button>
+        </div>
+
+        <div class="certificate-stats" aria-label="Certificate summary">
+          ${certificateStat('Documents', String(totalCount))}
+          ${certificateStat('Expiring soon', String(expiringCount))}
+          ${certificateStat('Expired', String(expiredCount))}
+          ${certificateStat('Needs review', String(reviewCount))}
+        </div>
+
+        <form class="certificate-upload" id="certificate-upload-form">
+          <label class="field certificate-file-field">
+            <span>Certificate or document</span>
+            <input
+              name="file"
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.txt,.doc,.docx,application/pdf,image/*,text/plain"
+              required
+            />
+          </label>
+          <button class="button button-primary" type="submit" ${certificatesState.uploading ? 'disabled' : ''}>
+            ${certificatesState.uploading ? 'Uploading...' : 'Upload'}
+          </button>
+        </form>
+
+        ${renderCertificatesNotice()}
+
+        <div class="certificate-table-wrap">
+          ${renderCertificatesTable(items)}
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function certificateStat(label: string, value: string): string {
+  return `
+    <div>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+}
+
+function renderCertificatesNotice(): string {
+  if (!certificatesState.notice) {
+    return '';
+  }
+
+  const noticeClass =
+    certificatesState.noticeKind === 'error'
+      ? 'alert-error'
+      : certificatesState.noticeKind === 'warning'
+        ? 'alert-warning'
+        : certificatesState.noticeKind === 'success'
+          ? 'alert-success'
+          : 'alert-info';
+
+  return `<p class="alert ${noticeClass} certificate-notice" role="status">${escapeHtml(certificatesState.notice)}</p>`;
+}
+
+function renderCertificatesTable(items: CertificateRecord[]): string {
+  if (certificatesState.loading) {
+    return `<div class="certificate-empty"><strong>Loading certificates...</strong></div>`;
+  }
+
+  if (items.length === 0) {
+    return `
+      <div class="certificate-empty">
+        <strong>No certificates uploaded yet.</strong>
+      </div>
+    `;
+  }
+
+  return `
+    <table class="certificate-table">
+      <thead>
+        <tr>
+          <th>Document</th>
+          <th>Rank</th>
+          <th>Expiry</th>
+          <th>Status</th>
+          <th>Uploaded</th>
+          <th><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map(renderCertificateRow).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderCertificateRow(item: CertificateRecord): string {
+  const expiryStatus = getExpiryStatus(item.expiryDate);
+  const processingStatus = getProcessingStatus(item.processingStatus);
+  const confidence = typeof item.confidence === 'number' ? `${Math.round(item.confidence * 100)}%` : 'Review';
+
+  return `
+    <tr>
+      <td>
+        <strong>${escapeHtml(item.documentName || item.originalFilename)}</strong>
+        <span>${escapeHtml(item.documentCategory || item.originalFilename)}</span>
+        <small>${escapeHtml(formatFileSize(item.sizeBytes))} &middot; ${escapeHtml(confidence)}</small>
+      </td>
+      <td>${escapeHtml(item.rank || 'Not detected')}</td>
+      <td>
+        <span class="status-pill ${expiryStatus.className}">${escapeHtml(expiryStatus.label)}</span>
+      </td>
+      <td>
+        <span class="status-pill ${processingStatus.className}">${escapeHtml(processingStatus.label)}</span>
+      </td>
+      <td>${escapeHtml(formatDate(item.uploadedAt))}</td>
+      <td>
+        <button
+          class="button button-ghost certificate-action"
+          type="button"
+          data-action="open-certificate"
+          data-certificate-id="${escapeHtml(item.certificateId)}"
+        >View</button>
+      </td>
+    </tr>
+  `;
+}
+
+function getExpiryStatus(expiryDate: string | null | undefined): {
+  kind: 'unknown' | 'valid' | 'expiring' | 'expired';
+  label: string;
+  className: string;
+} {
+  if (!expiryDate) {
+    return { kind: 'unknown', label: 'Unknown', className: 'status-neutral' };
+  }
+
+  const today = startOfToday();
+  const expiry = new Date(`${expiryDate}T00:00:00`);
+  const days = Math.ceil((expiry.getTime() - today.getTime()) / 86_400_000);
+
+  if (Number.isNaN(days)) {
+    return { kind: 'unknown', label: 'Unknown', className: 'status-neutral' };
+  }
+
+  if (days < 0) {
+    return { kind: 'expired', label: 'Expired', className: 'status-danger' };
+  }
+
+  if (days <= 90) {
+    return { kind: 'expiring', label: `${days} days`, className: 'status-warning' };
+  }
+
+  return { kind: 'valid', label: formatDate(expiryDate), className: 'status-good' };
+}
+
+function getProcessingStatus(status: string): { label: string; className: string } {
+  if (status === 'ANALYZED') {
+    return { label: 'Analyzed', className: 'status-good' };
+  }
+  if (status === 'ANALYZING') {
+    return { label: 'Analyzing', className: 'status-neutral' };
+  }
+  if (status === 'REVIEW_REQUIRED') {
+    return { label: 'Review', className: 'status-warning' };
+  }
+  return { label: status || 'Unknown', className: 'status-neutral' };
+}
+
+function startOfToday(): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
+function formatDate(value: string): string {
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0 KB';
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function renderAccount(session: AuthSession | null): string {
   if (!session) {
     return renderAuthRequired('Account');
@@ -1022,7 +1301,7 @@ function claimToString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
-function bindCurrentPage(): void {
+function bindCurrentPage(session: AuthSession | null): void {
   const searchInput = document.querySelector<HTMLInputElement>('#faq-search');
 
   if (searchInput) {
@@ -1034,12 +1313,24 @@ function bindCurrentPage(): void {
       });
     });
   }
+
+  const certificatePage = document.querySelector<HTMLElement>('#certificate-page');
+
+  if (certificatePage && session) {
+    void loadCertificates(session);
+  }
 }
 
 async function handleSubmit(event: SubmitEvent): Promise<void> {
   const form = event.target;
 
   if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  if (form.id === 'certificate-upload-form') {
+    event.preventDefault();
+    await handleCertificateUpload(form);
     return;
   }
 
@@ -1063,6 +1354,184 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
         'Request prepared. Connect the approved backend or support channel to send it.';
     }
   }
+}
+
+async function loadCertificates(session: AuthSession, force = false): Promise<void> {
+  const subject = claimToString(session.claims.sub) ?? 'signed-in-user';
+
+  if (!force && certificatesState.loadedForSubject === subject) {
+    return;
+  }
+
+  certificatesState = {
+    ...certificatesState,
+    loading: true,
+    loadedForSubject: subject,
+    notice: force ? 'Refreshing certificates...' : certificatesState.notice,
+    noticeKind: 'info',
+  };
+  renderApp();
+
+  try {
+    const items = await apiRequest<CertificateRecord[]>('/api/customer/certificates', session);
+    certificatesState = {
+      ...certificatesState,
+      items,
+      loading: false,
+      loadedForSubject: subject,
+      notice: items.length ? '' : 'No certificate records yet.',
+      noticeKind: 'info',
+    };
+  } catch (error) {
+    certificatesState = {
+      ...certificatesState,
+      loading: false,
+      notice: normalizeError(error).message,
+      noticeKind: 'error',
+    };
+  }
+
+  renderApp();
+}
+
+async function handleCertificateUpload(form: HTMLFormElement): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  if (!form.reportValidity()) {
+    return;
+  }
+
+  const fileInput = form.elements.namedItem('file');
+  const file = fileInput instanceof HTMLInputElement ? fileInput.files?.[0] : null;
+
+  if (!file) {
+    certificatesState = {
+      ...certificatesState,
+      notice: 'Choose a certificate file to upload.',
+      noticeKind: 'error',
+    };
+    renderApp();
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  certificatesState = {
+    ...certificatesState,
+    uploading: true,
+    notice: 'Uploading certificate...',
+    noticeKind: 'info',
+  };
+  renderApp();
+
+  try {
+    const uploaded = await apiRequest<CertificateRecord>('/api/customer/certificates', session, {
+      method: 'POST',
+      body: formData,
+    });
+    certificatesState = {
+      ...certificatesState,
+      uploading: false,
+      notice: `${uploaded.documentName || uploaded.originalFilename} uploaded.`,
+      noticeKind: uploaded.processingStatus === 'REVIEW_REQUIRED' ? 'warning' : 'success',
+    };
+    await loadCertificates(session, true);
+  } catch (error) {
+    certificatesState = {
+      ...certificatesState,
+      uploading: false,
+      notice: normalizeError(error).message,
+      noticeKind: 'error',
+    };
+    renderApp();
+  }
+}
+
+async function openCertificate(certificateId: string): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  try {
+    certificatesState = {
+      ...certificatesState,
+      notice: 'Preparing document link...',
+      noticeKind: 'info',
+    };
+    renderApp();
+    const response = await apiRequest<DownloadUrlResponse>(
+      `/api/customer/certificates/${encodeURIComponent(certificateId)}/download-url`,
+      session,
+    );
+    certificatesState = { ...certificatesState, notice: '', noticeKind: 'info' };
+    renderApp();
+    window.open(response.url, '_blank', 'noopener,noreferrer');
+  } catch (error) {
+    certificatesState = {
+      ...certificatesState,
+      notice: normalizeError(error).message,
+      noticeKind: 'error',
+    };
+    renderApp();
+  }
+}
+
+async function refreshCertificates(): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  await loadCertificates(session, true);
+}
+
+async function apiRequest<T>(
+  path: string,
+  session: AuthSession,
+  init: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${session.accessToken}`);
+
+  const response = await fetch(`${config.apiBaseUrl}${path}`, {
+    ...init,
+    headers,
+  });
+
+  if (response.status === 401) {
+    clearSession();
+    resetCertificateState();
+    throw new Error('Your session expired. Sign in again.');
+  }
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as T;
+}
+
+async function readApiError(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { message?: unknown };
+    if (typeof body.message === 'string' && body.message.trim()) {
+      return body.message;
+    }
+  } catch {
+    // Fall back to a generic status message below.
+  }
+
+  return `Request failed with status ${response.status}.`;
 }
 
 async function handleAuthSubmit(form: HTMLFormElement): Promise<void> {
@@ -1219,6 +1688,18 @@ function handleClick(event: MouseEvent): void {
 
   if (action === 'resend-code') {
     void handleResendCode();
+  }
+
+  if (action === 'refresh-certificates') {
+    void refreshCertificates();
+  }
+
+  if (action === 'open-certificate') {
+    const certificateId = actionElement.dataset.certificateId;
+
+    if (certificateId) {
+      void openCertificate(certificateId);
+    }
   }
 
   if (action === 'toggle-menu') {
