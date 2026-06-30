@@ -533,7 +533,7 @@ function renderLayout(session: AuthSession | null, page: string): string {
         <span class="brand-mark">SM</span>
         <span>
           <strong>SeaMarg</strong>
-          <small>Navigate Your Maritime Career</small>
+          <small>One crew. Every shore.</small>
         </span>
       </a>
       <button class="menu-toggle" type="button" aria-expanded="false" data-action="toggle-menu">
@@ -588,16 +588,21 @@ function renderHome(): string {
   return `
     <section class="hero">
       <div class="hero-content">
-        <p class="eyebrow">AI-powered maritime guidance</p>
-        <h1>Navigate your maritime career with clarity.</h1>
+        <p class="eyebrow">Crew document command center</p>
+        <h1>One crew. Every shore.</h1>
         <p class="hero-copy">
-          SeaMarg helps seafarers understand certificates, DG Shipping and STCW compliance, career next steps, and scam risk before small mistakes become missed contracts.
+          SeaMarg keeps certificates, compliance signals, career next steps, and scam-risk guidance in one practical workspace before small mistakes become missed contracts.
         </p>
         <div class="hero-actions">
           <button class="button button-primary" type="button" data-action="login">Get started</button>
           <a class="button button-secondary" href="#/help">Explore FAQ</a>
         </div>
         <p class="trust-note">Not a manning agent. Not a certification authority. Guidance is advisory only.</p>
+        <div class="hero-stats" aria-label="SeaMarg highlights">
+          <span><strong>82</strong><small>Readiness score</small></span>
+          <span><strong>90d</strong><small>Expiry watch</small></span>
+          <span><strong>AI</strong><small>Rule confidence</small></span>
+        </div>
       </div>
       <div class="hero-visual" aria-label="SeaMarg dashboard preview">
         <div class="mock-browser">
@@ -617,9 +622,9 @@ function renderHome(): string {
             </ul>
           </div>
           <div class="mini-grid">
-            <span>Certificate check</span>
-            <span>Career path</span>
-            <span>Scam alert</span>
+            <span>Document wallet</span>
+            <span>Expiry alerts</span>
+            <span>Scam signals</span>
             <span>DG guidance</span>
           </div>
         </div>
@@ -633,7 +638,7 @@ function renderHome(): string {
       </div>
       <div class="feature-grid">
         ${featureCard('Complex rules', 'DG Shipping, STCW, flag-state, company, and MMD requirements can overlap and change.')}
-        ${featureCard('Scattered advice', 'Government portals, informal groups, and unofficial advice rarely give one practical answer.')}
+        ${featureCard('Scattered proof', 'Certificates, medicals, training evidence, and company requirements are rarely kept in one readable place.')}
         ${featureCard('Real career cost', 'Last-minute document issues can mean delayed sign-on, missed contracts, and unnecessary agent dependence.')}
       </div>
     </section>
