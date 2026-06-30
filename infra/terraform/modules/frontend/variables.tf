@@ -36,7 +36,7 @@ variable "backend_api_origin_domain_name" {
       trimspace(var.backend_api_origin_domain_name) == "" ||
       can(regex("^[^/:]+$", trimspace(var.backend_api_origin_domain_name)))
     )
-    error_message = "backend_api_origin_domain_name must be a domain name only, for example ec2-13-233-83-132.ap-south-1.compute.amazonaws.com."
+    error_message = "backend_api_origin_domain_name must be a domain name only, for example ec2-35-154-109-175.ap-south-1.compute.amazonaws.com."
   }
 }
 

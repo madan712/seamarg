@@ -200,7 +200,7 @@ On the EC2 host, keep those values in `/opt/seamarg/backend.env` with `600` perm
 
 ```bash
 scripts/deploy-backend-ec2.sh \
-  ec2-user@ec2-13-233-83-132.ap-south-1.compute.amazonaws.com \
+  ec2-user@ec2-35-154-109-175.ap-south-1.compute.amazonaws.com \
   /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem
 ```
 
