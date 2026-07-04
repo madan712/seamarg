@@ -43,5 +43,5 @@ variable "github_oidc_provider_arn" {
 variable "backend_api_origin_domain_name" {
   description = "Backend API origin domain name for the frontend CloudFront /api/* behavior. Use the domain only, without http:// or a path."
   type        = string
-  default     = "ec2-35-154-109-175.ap-south-1.compute.amazonaws.com"
+  default     = "ec2-65-1-132-40.ap-south-1.compute.amazonaws.com"
 }

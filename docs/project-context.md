@@ -78,7 +78,7 @@ Certificate/storage environment variables:
 
 On EC2, provide these environment variables to the backend Docker container directly or through a host-local secret file that is not committed. `COGNITO_ISSUER_URI` should continue to come from the Terraform-created Cognito user pool. Attach the Terraform output `backend_runtime_data_policy_arn` to the backend runtime role or EC2 instance profile before relying on S3/DynamoDB access; do not commit or place long-lived AWS access keys in `/opt/seamarg/backend.env`.
 
-The current dev backend EC2 host is `ec2-35-154-109-175.ap-south-1.compute.amazonaws.com`, with public IPv4 `35.154.109.175`, connecting as `ec2-user` with the local key at `/Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem`. It runs Amazon Linux 2023 with Docker enabled. The instance ID is `i-04e02dc88bcc372b3`. The backend container is named `seamarg-backend`, uses image `seamarg-backend:latest`, maps host port `80` to container port `8080`, and uses restart policy `unless-stopped`. Runtime environment variables live on the server at `/opt/seamarg/backend.env` with `600` permissions and must not be committed or printed. As of June 27, 2026, the file includes `SEAMARG_AWS_REGION=ap-south-1`, `AWS_REGION=ap-south-1`, `SEAMARG_DOCUMENT_BUCKET=seamarg-dev-certificates-695663959248`, and `SEAMARG_APP_DATA_TABLE=seamarg-dev-app-data`.
+The current dev backend EC2 host is `ec2-65-1-132-40.ap-south-1.compute.amazonaws.com`, with public IPv4 `65.1.132.40`, connecting as `ec2-user` with the local key at `/Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem`. It runs Amazon Linux 2023 with Docker enabled. The instance ID is `i-04e02dc88bcc372b3`. The backend container is named `seamarg-backend`, uses image `seamarg-backend:latest`, maps host port `80` to container port `8080`, and uses restart policy `unless-stopped`. Runtime environment variables live on the server at `/opt/seamarg/backend.env` with `600` permissions and must not be committed or printed. As of June 27, 2026, the file includes `SEAMARG_AWS_REGION=ap-south-1`, `AWS_REGION=ap-south-1`, `SEAMARG_DOCUMENT_BUCKET=seamarg-dev-certificates-695663959248`, and `SEAMARG_APP_DATA_TABLE=seamarg-dev-app-data`.
 
 The dev backend EC2 instance profile is `arn:aws:iam::695663959248:instance-profile/seamarg-dev-backend-ec2`, with role `arn:aws:iam::695663959248:role/seamarg-dev-backend-ec2`. Terraform now manages this role/profile through `infra/terraform/modules/backend-runtime` and imports the manually created dev resources through `infra/terraform/environments/dev/imports.tf`. The role has the Terraform-created policy `arn:aws:iam::695663959248:policy/seamarg-dev-backend-runtime-data` attached, allowing the backend to access the private certificate bucket and generic DynamoDB table. If the backend EC2 instance is replaced manually, attach instance profile `seamarg-dev-backend-ec2` to the new instance.
 
@@ -107,9 +107,9 @@ Useful backend checks:
 
 ```bash
 ./gradlew :backend:test :backend:bootJar
-scripts/deploy-backend-ec2.sh ec2-user@ec2-35-154-109-175.ap-south-1.compute.amazonaws.com /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem
-curl -i http://ec2-35-154-109-175.ap-south-1.compute.amazonaws.com/api/public/hello
-ssh -i /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem ec2-user@ec2-35-154-109-175.ap-south-1.compute.amazonaws.com 'sudo docker ps --filter name=seamarg-backend'
+scripts/deploy-backend-ec2.sh ec2-user@ec2-65-1-132-40.ap-south-1.compute.amazonaws.com /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem
+curl -i http://ec2-65-1-132-40.ap-south-1.compute.amazonaws.com/api/public/hello
+ssh -i /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem ec2-user@ec2-65-1-132-40.ap-south-1.compute.amazonaws.com 'sudo docker ps --filter name=seamarg-backend'
 ```
 
 The old dev EKS cluster was named `seamarg-dev-eks`, with backend namespace `seamarg`, service `seamarg-backend`, ECR repo `seamarg-dev-backend`, VPC `vpc-0a104403d9d102d07`, and classic ELB `a7967211d441d405abd01f15c17995ff`. These resources were deleted on June 24, 2026. A post-cleanup Terraform plan reported no changes, and Terraform state no longer contains backend/EKS/ECR/VPC/Kubernetes resources.
@@ -128,7 +128,7 @@ The AWS provider currently validates this table with a deprecation warning for `
 
 The frontend is deployed by the pipeline by building `frontend/dist`, syncing static files to a private S3 bucket, and invalidating CloudFront.
 
-CloudFront proxies `/api/*` to the dev backend EC2 origin `ec2-35-154-109-175.ap-south-1.compute.amazonaws.com` over HTTP. The browser calls the same HTTPS CloudFront origin, which avoids mixed-content failures from the HTTPS frontend trying to call the raw HTTP EC2 host. The deployed frontend build uses Terraform output `frontend_api_base_url` for `VITE_API_BASE_URL`; local development can continue using `http://localhost:8080`.
+CloudFront proxies `/api/*` to the dev backend EC2 origin `ec2-65-1-132-40.ap-south-1.compute.amazonaws.com` over HTTP. The browser calls the same HTTPS CloudFront origin, which avoids mixed-content failures from the HTTPS frontend trying to call the raw HTTP EC2 host. The deployed frontend build uses Terraform output `frontend_api_base_url` for `VITE_API_BASE_URL`; local development can continue using `http://localhost:8080`.
 
 As of June 26, 2026, the frontend is a vanilla TypeScript/Vite SPA with hash routing. It includes public Home, About, Help/FAQ, Contact, and Support pages; embedded Cognito User Pool forms for sign in, sign up, email verification, resend code, forgot password, and reset password; protected Dashboard, Profile, Certificates, Ask SeaMarg AI, Career Path, and Account routes; and a blank Dashboard shell as the post-login landing page.
 
@@ -172,7 +172,7 @@ Lightweight checks that worked:
 AWS_PROFILE=personal AWS_REGION=ap-south-1 terraform -chdir=infra/terraform/environments/dev validate
 AWS_PROFILE=personal AWS_REGION=ap-south-1 terraform -chdir=infra/terraform/environments/dev plan -input=false -no-color
 AWS_PROFILE=personal AWS_REGION=ap-south-1 terraform -chdir=infra/terraform/environments/dev apply -input=false -auto-approve -no-color
-curl -fsS http://ec2-35-154-109-175.ap-south-1.compute.amazonaws.com/api/public/hello
+curl -fsS http://ec2-65-1-132-40.ap-south-1.compute.amazonaws.com/api/public/hello
 AWS_PROFILE=personal AWS_REGION=ap-south-1 aws ec2 describe-instances --instance-ids i-04e02dc88bcc372b3 --query 'Reservations[0].Instances[0].IamInstanceProfile.Arn' --output text
 AWS_PROFILE=personal AWS_REGION=ap-south-1 aws iam list-attached-role-policies --role-name seamarg-dev-backend-ec2 --query 'AttachedPolicies[].PolicyArn' --output text
 ```
@@ -204,7 +204,7 @@ Operational issues encountered and fixed:
 - The Kubernetes `LoadBalancer` service had to be deleted and its classic ELB had to disappear before old EKS networking could be fully removed.
 - Local `actionlint` was not installed, so workflow verification used YAML parsing rather than a GitHub Actions semantic lint.
 - A backend CI deploy reached EC2 but failed with `client_loop: send disconnect: Broken pipe` while Docker was running a full Gradle build on the EC2 host. The fix was to move `./gradlew :backend:bootJar` into GitHub Actions and make the EC2 script upload the prebuilt jar, then build only a small runtime image remotely.
-- The old remote Gradle/Docker build left the `t3.micro` backend instance unresponsive to SSH and HTTP. A normal reboot did not recover it, but `stop-instances --force` followed by start recovered the instance and changed its public DNS from `ec2-13-127-32-60.ap-south-1.compute.amazonaws.com` to `ec2-13-233-83-132.ap-south-1.compute.amazonaws.com`, and the latest restart changed it again to `ec2-35-154-109-175.ap-south-1.compute.amazonaws.com`.
+- The old remote Gradle/Docker build left the `t3.micro` backend instance unresponsive to SSH and HTTP. A normal reboot did not recover it, but `stop-instances --force` followed by start recovered the instance and changed its public DNS from `ec2-13-127-32-60.ap-south-1.compute.amazonaws.com` to `ec2-13-233-83-132.ap-south-1.compute.amazonaws.com`, and the latest restart changed it again to `ec2-35-154-109-175.ap-south-1.compute.amazonaws.com`. A later restart changed it again to `ec2-65-1-132-40.ap-south-1.compute.amazonaws.com` (public IPv4 `65.1.132.40`), which is the current host.
 - After the stop/start recovery, the jar-only `scripts/deploy-backend-ec2.sh` path was verified manually against the new host and `/api/public/hello` returned successfully.
 - The GitHub backend smoke test once failed immediately after deploy with `curl: (7) Failed to connect ... port 80`; the container was healthy shortly afterward. The deploy script and workflow smoke test now wait/retry for backend readiness.
 

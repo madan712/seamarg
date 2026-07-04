@@ -75,10 +75,10 @@ Set those values in the backend container env file on the EC2 host as `COGNITO_I
 The dev backend host is:
 
 ```text
-ec2-35-154-109-175.ap-south-1.compute.amazonaws.com
+ec2-65-1-132-40.ap-south-1.compute.amazonaws.com
 ```
 
-The current public IPv4 address is `35.154.109.175`.
+The current public IPv4 address is `65.1.132.40`.
 
 The server keeps backend runtime variables in `/opt/seamarg/backend.env`. Do not commit or print that file because it contains `SEAMARG_ADMIN_PASSWORD`.
 
@@ -90,7 +90,7 @@ Required GitHub Environment secret for backend CI/CD:
 
 Optional GitHub Environment variables:
 
-- `BACKEND_EC2_HOST`, defaults to `ec2-35-154-109-175.ap-south-1.compute.amazonaws.com`.
+- `BACKEND_EC2_HOST`, defaults to `ec2-65-1-132-40.ap-south-1.compute.amazonaws.com`.
 - `BACKEND_EC2_USER`, defaults to `ec2-user`.
 - `BACKEND_EC2_REMOTE_ROOT`, defaults to `/opt/seamarg`.
 - `BACKEND_EC2_SECURITY_GROUP_ID`, defaults to `sg-0edcb8bd177aa82d4`.
@@ -110,6 +110,6 @@ To rebuild and restart the backend container manually:
 
 ```bash
 scripts/deploy-backend-ec2.sh \
-  ec2-user@ec2-35-154-109-175.ap-south-1.compute.amazonaws.com \
+  ec2-user@ec2-65-1-132-40.ap-south-1.compute.amazonaws.com \
   /Users/madan.chaudhary/Downloads/Keys/MyWindowsKey.pem
 ```

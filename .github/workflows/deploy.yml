@@ -291,14 +291,14 @@ jobs:
 
       - name: Deploy backend to EC2
         run: |
-          backend_host="${BACKEND_EC2_HOST:-ec2-35-154-109-175.ap-south-1.compute.amazonaws.com}"
+          backend_host="${BACKEND_EC2_HOST:-ec2-65-1-132-40.ap-south-1.compute.amazonaws.com}"
           backend_user="${BACKEND_EC2_USER:-ec2-user}"
           remote_root="${BACKEND_EC2_REMOTE_ROOT:-/opt/seamarg}"
           ./scripts/deploy-backend-ec2.sh "${backend_user}@${backend_host}" "$HOME/.ssh/seamarg-backend-ec2.pem" "$remote_root"
 
       - name: Smoke test backend
         run: |
-          backend_host="${BACKEND_EC2_HOST:-ec2-35-154-109-175.ap-south-1.compute.amazonaws.com}"
+          backend_host="${BACKEND_EC2_HOST:-ec2-65-1-132-40.ap-south-1.compute.amazonaws.com}"
           for attempt in {1..30}; do
             if curl -fsS --max-time 5 "http://${backend_host}/api/public/hello"; then
               exit 0
