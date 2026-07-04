@@ -3,8 +3,11 @@ package com.seamarg.backend;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.springframework.http.MediaType;
 
 import com.seamarg.backend.security.AdminPasswordAuthenticationFilter;
 
@@ -72,6 +75,46 @@ class EndpointSecurityTests {
 			.andExpect(status().isServiceUnavailable())
 			.andExpect(jsonPath("$.message").value(
 				"Certificate document storage is not configured. Set SEAMARG_DOCUMENT_BUCKET for the backend."));
+	}
+
+	@Test
+	void customerProfileRequiresJwt() throws Exception {
+		mockMvc.perform(get("/api/customer/profile")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void customerProfileReturnsSavedSectionForSameUser() throws Exception {
+		mockMvc.perform(put("/api/customer/profile/main")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"firstName\":\"Madan\",\"lastName\":\"Chaudhary\",\"dateOfBirth\":\"1986-09-15\"}")
+				.with(jwt().jwt(token -> token.subject("profile-user-1"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.firstName").value("Madan"));
+
+		mockMvc.perform(get("/api/customer/profile")
+				.with(jwt().jwt(token -> token.subject("profile-user-1"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.main.firstName").value("Madan"))
+			.andExpect(jsonPath("$.main.lastName").value("Chaudhary"));
+	}
+
+	@Test
+	void customerProfileRejectsMainInformationMissingRequiredFields() throws Exception {
+		mockMvc.perform(put("/api/customer/profile/main")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"firstName\":\"Madan\",\"lastName\":\"Chaudhary\"}")
+				.with(jwt().jwt(token -> token.subject("profile-user-2"))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.message").value("Date of Birth is required."));
+	}
+
+	@Test
+	void customerProfileRejectsUnknownSection() throws Exception {
+		mockMvc.perform(put("/api/customer/profile/not-a-section")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{}")
+				.with(jwt().jwt(token -> token.subject("profile-user-3"))))
+			.andExpect(status().isBadRequest());
 	}
 
 	@Test

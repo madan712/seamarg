@@ -63,7 +63,7 @@ public class SecurityConfig {
 			.map(String::trim)
 			.filter(StringUtils::hasText)
 			.toList());
-		configuration.setAllowedMethods(Arrays.asList("GET", "POST", "OPTIONS"));
+		configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "OPTIONS"));
 		configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
 		configuration.setExposedHeaders(Arrays.asList("Location"));
 		configuration.setMaxAge(3600L);

@@ -32,39 +32,6 @@ type AuthMode = 'signin' | 'signup' | 'verify' | 'forgot' | 'reset';
 
 type NoticeKind = 'info' | 'success' | 'warning' | 'error';
 
-type CertificateRecord = {
-  certificateId: string;
-  originalFilename: string;
-  contentType: string;
-  sizeBytes: number;
-  uploadedAt: string;
-  updatedAt: string;
-  processingStatus: 'ANALYZING' | 'ANALYZED' | 'REVIEW_REQUIRED' | string;
-  documentName?: string | null;
-  documentCategory?: string | null;
-  rank?: string | null;
-  expiryDate?: string | null;
-  issuer?: string | null;
-  certificateNumber?: string | null;
-  confidence?: number | null;
-  extractionSource?: string | null;
-  extractionNotes?: string | null;
-};
-
-type DownloadUrlResponse = {
-  url: string;
-  expiresAt: string;
-};
-
-type CertificatesState = {
-  items: CertificateRecord[];
-  loading: boolean;
-  uploading: boolean;
-  loadedForSubject: string | null;
-  notice: string;
-  noticeKind: NoticeKind;
-};
-
 type Route = {
   path: string;
   label: string;
@@ -83,6 +50,7 @@ const appRoot = app;
 
 const storageKeys = {
   session: 'seamarg.auth.session',
+  bannerDismissed: 'seamarg.portal.bannerDismissed',
 };
 
 const runtimeConfig = (
@@ -103,27 +71,13 @@ const config: AppConfig = {
 let authMode: AuthMode = 'signin';
 let authNotice = '';
 let authNoticeKind: NoticeKind = 'info';
+let welcomeBannerDismissed = window.sessionStorage.getItem(storageKeys.bannerDismissed) === '1';
+let accountMenuOpen = false;
 let pendingEmail = '';
 let pendingPasswordForAutoSignIn = '';
-let certificatesState: CertificatesState = {
-  items: [],
-  loading: false,
-  uploading: false,
-  loadedForSubject: null,
-  notice: '',
-  noticeKind: 'info',
-};
 
-function resetCertificateState(): void {
-  certificatesState = {
-    items: [],
-    loading: false,
-    uploading: false,
-    loadedForSubject: null,
-    notice: '',
-    noticeKind: 'info',
-  };
-}
+// Portal per-page notice (e.g. "Saved."), scoped to the page that set it.
+let portalNotice: { path: string; message: string; kind: NoticeKind } | null = null;
 
 const publicRoutes: Route[] = [
   { path: '/', label: 'Home', render: renderHome, nav: 'public' },
@@ -134,52 +88,239 @@ const publicRoutes: Route[] = [
   { path: '/signin', label: 'Sign in', render: renderSignIn },
 ];
 
-const privateRoutes: Route[] = [
-  {
-    path: '/dashboard',
-    label: 'Dashboard',
-    render: () => renderPrivatePage('Dashboard'),
-    nav: 'private',
-    requiresAuth: true,
-  },
+// Private seafarer portal information architecture.
+// Top-level steps map to the redesigned 3-step profile builder; each step owns a
+// left submenu of sub-pages. See docs/private-portal-prd.md.
+type PrivateSubPage = {
+  slug: string;
+  label: string;
+  icon: string;
+};
+
+type PrivateStep = {
+  path: string;
+  label: string;
+  icon: string;
+  subPages: PrivateSubPage[];
+};
+
+const privateSteps: PrivateStep[] = [
   {
     path: '/profile',
-    label: 'Profile',
-    render: () => renderPrivatePage('Profile'),
-    nav: 'private',
-    requiresAuth: true,
+    label: 'Your profile',
+    icon: '🪪',
+    subPages: [
+      { slug: 'guide', label: 'Guide to filling your profile', icon: '❓' },
+      { slug: 'main-information', label: 'Main information', icon: '👤' },
+      { slug: 'contact-details', label: 'Contact details', icon: '📞' },
+      { slug: 'passport', label: 'Passport and Seaman book', icon: '📗' },
+      { slug: 'address', label: 'Address and Airport', icon: '📍' },
+      { slug: 'languages', label: 'Languages', icon: '🈳' },
+      { slug: 'professional-skills', label: 'Professional skills', icon: '🛠️' },
+      { slug: 'visas', label: 'Visas', icon: '🛂' },
+      { slug: 'relatives', label: 'Relatives and next of kin', icon: '👪' },
+      { slug: 'notes', label: 'Notes and miscellaneous', icon: '📝' },
+    ],
   },
   {
     path: '/certificates',
     label: 'Certificates',
-    render: renderCertificates,
-    nav: 'private',
-    requiresAuth: true,
+    icon: '📜',
+    subPages: [
+      { slug: 'guide', label: 'Guide to entering certificates', icon: '❓' },
+      { slug: 'main-documents', label: 'Main documents', icon: '🗂️' },
+      { slug: 'general', label: 'General certificates', icon: '📄' },
+      { slug: 'ncoc', label: 'National Certificates Of Competency', icon: '📄' },
+      { slug: 'medical', label: 'Medical Certificates', icon: '🩺' },
+      { slug: 'tanker-passenger', label: 'Tanker/Passenger certificates', icon: '📄' },
+      { slug: 'offshore', label: 'Offshore certificates', icon: '📄' },
+      { slug: 'flag-state', label: 'Flag State Documents', icon: '🚩' },
+    ],
   },
   {
-    path: '/ai',
-    label: 'Ask SeaMarg AI',
-    render: () => renderPrivatePage('Ask SeaMarg AI'),
-    nav: 'private',
-    requiresAuth: true,
-  },
-  {
-    path: '/career',
-    label: 'Career Path',
-    render: () => renderPrivatePage('Career Path'),
-    nav: 'private',
-    requiresAuth: true,
-  },
-  {
-    path: '/account',
-    label: 'Account',
-    render: renderAccount,
-    nav: 'private',
-    requiresAuth: true,
+    path: '/sea-service',
+    label: 'Sea service records',
+    icon: '🚢',
+    subPages: [
+      { slug: 'guide', label: 'Guide to filling out sea service', icon: '❓' },
+    ],
   },
 ];
 
-const allRoutes = [...publicRoutes, ...privateRoutes];
+// Post-login landing: Step 1, first sub-page (Guide to filling your profile).
+const DEFAULT_PRIVATE_PATH = '/profile';
+
+function findPrivateStep(stepPath: string): PrivateStep | undefined {
+  return privateSteps.find((step) => step.path === stepPath);
+}
+
+function firstPathSegment(path: string): string {
+  return path.split('/').filter(Boolean)[0] ?? '';
+}
+
+function isPrivatePath(path: string): boolean {
+  const segment = `/${firstPathSegment(path)}`;
+  return segment === '/account' || Boolean(findPrivateStep(segment));
+}
+
+function resolvePrivateView(path: string): { step: PrivateStep; sub: PrivateSubPage } | null {
+  const segments = path.split('/').filter(Boolean);
+  const step = findPrivateStep(`/${segments[0] ?? ''}`);
+
+  if (!step) {
+    return null;
+  }
+
+  const requestedSlug = segments[1];
+  const sub = step.subPages.find((page) => page.slug === requestedSlug) ?? step.subPages[0];
+
+  if (!sub) {
+    return null;
+  }
+
+  return { step, sub };
+}
+
+// ---------------------------------------------------------------------------
+// Seafarer profile data (client-side draft persistence).
+//
+// The backend profile API does not exist yet. Until it does, each profile
+// section is saved to localStorage keyed by Cognito subject so the form is
+// genuinely fillable/editable and survives reloads. Swapping this for a real
+// API later only requires changing loadProfile/saveProfileSection.
+// ---------------------------------------------------------------------------
+type MainInformation = {
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  sex: string;
+  position: string;
+  altPosition1: string;
+  altPosition2: string;
+  altPosition3: string;
+  altPosition4: string;
+  offshore: boolean;
+  dateOfReadiness: string;
+  minSalaryUsd: string;
+  citizenship: string;
+  placeOfBirth: string;
+  dateOfBirth: string;
+  highestEducation: string;
+  yearGraduated: string;
+  graduatedFrom: string;
+  educationalLevel: string;
+};
+
+type ProfileData = {
+  mainInformation?: Partial<MainInformation>;
+};
+
+// Dummy option lists — replaced with real reference data later (PRD §9).
+const SEX_OPTIONS = ['Male', 'Female'];
+
+const POSITION_OPTIONS = [
+  'Master',
+  'Chief Officer',
+  'Second Officer',
+  'Third Officer',
+  'Deck Cadet',
+  'Chief Engineer',
+  'Second Engineer',
+  'Third Engineer',
+  'Fourth Engineer',
+  'Electro-Technical Officer (ETO)',
+  'Engine Cadet',
+  'Bosun',
+  'Able Seaman (AB)',
+  'Ordinary Seaman (OS)',
+  'Oiler',
+  'Motorman',
+  'Fitter',
+  'Chief Cook',
+  'Steward',
+];
+
+const CITIZENSHIP_OPTIONS = [
+  'India',
+  'Philippines',
+  'Ukraine',
+  'Russia',
+  'Indonesia',
+  'China',
+  'Bangladesh',
+  'Myanmar',
+  'United Kingdom',
+  'Norway',
+  'Netherlands',
+  'Greece',
+  'Turkey',
+  'Brazil',
+  'United States',
+  'Other',
+];
+
+const EDUCATION_OPTIONS = [
+  'High school',
+  'Diploma',
+  "Bachelor's degree",
+  "Master's degree",
+  'Doctorate',
+  'Other',
+];
+
+function profileStorageKey(session: AuthSession | null): string {
+  const subject = claimToString(session?.claims.sub) ?? 'anonymous';
+  return `seamarg.profile.${subject}`;
+}
+
+function loadProfile(session: AuthSession | null): ProfileData {
+  try {
+    const raw = window.localStorage.getItem(profileStorageKey(session));
+    return raw ? (JSON.parse(raw) as ProfileData) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveProfileSection<K extends keyof ProfileData>(
+  session: AuthSession | null,
+  section: K,
+  data: ProfileData[K],
+): void {
+  const profile = loadProfile(session);
+  profile[section] = data;
+  window.localStorage.setItem(profileStorageKey(session), JSON.stringify(profile));
+}
+
+// Prefill main information from any saved draft, falling back to Cognito claims.
+function getMainInformation(session: AuthSession | null): MainInformation {
+  const saved = loadProfile(session).mainInformation ?? {};
+  const fullName = displayName(session);
+  const email = claimToString(session?.claims.email);
+  const nameParts = fullName && fullName !== email ? fullName.split(/\s+/).filter(Boolean) : [];
+
+  return {
+    firstName: saved.firstName ?? nameParts[0] ?? '',
+    middleName: saved.middleName ?? '',
+    lastName: saved.lastName ?? (nameParts.length > 1 ? nameParts.slice(1).join(' ') : ''),
+    sex: saved.sex ?? '',
+    position: saved.position ?? '',
+    altPosition1: saved.altPosition1 ?? '',
+    altPosition2: saved.altPosition2 ?? '',
+    altPosition3: saved.altPosition3 ?? '',
+    altPosition4: saved.altPosition4 ?? '',
+    offshore: saved.offshore ?? false,
+    dateOfReadiness: saved.dateOfReadiness ?? '',
+    minSalaryUsd: saved.minSalaryUsd ?? '',
+    citizenship: saved.citizenship ?? '',
+    placeOfBirth: saved.placeOfBirth ?? '',
+    dateOfBirth: saved.dateOfBirth ?? '',
+    highestEducation: saved.highestEducation ?? '',
+    yearGraduated: saved.yearGraduated ?? '',
+    graduatedFrom: saved.graduatedFrom ?? '',
+    educationalLevel: saved.educationalLevel ?? '',
+  };
+}
 
 const faqItems = [
   {
@@ -474,7 +615,6 @@ function signOut(): void {
   }
 
   clearSession();
-  resetCertificateState();
   setPath('/');
   renderApp();
 }
@@ -503,20 +643,56 @@ function normalizeError(error: unknown): Error {
 function renderApp(): void {
   const session = getSession();
   const path = getCurrentPath();
-  const route = allRoutes.find((candidate) => candidate.path === path) ?? null;
 
   if (path === '/signin' && session) {
-    setPath('/dashboard');
+    setPath(DEFAULT_PRIVATE_PATH);
     return;
   }
+
+  // Account page: private, but rendered with its own layout (not the step shell).
+  if (path === '/account') {
+    if (!session) {
+      appRoot.innerHTML = renderLayout(session, renderAuthRequired('Account'));
+      bindCurrentPage(session);
+      return;
+    }
+
+    appRoot.innerHTML = renderLayout(session, renderAccount(session));
+    bindCurrentPage(session);
+    return;
+  }
+
+  // Private seafarer portal (3-step profile builder).
+  if (isPrivatePath(path)) {
+    if (!session) {
+      appRoot.innerHTML = renderLayout(session, renderAuthRequired('Your profile'));
+      bindCurrentPage(session);
+      return;
+    }
+
+    const view = resolvePrivateView(path);
+
+    if (!view) {
+      setPath(DEFAULT_PRIVATE_PATH);
+      return;
+    }
+
+    // Normalize the URL so a bare step path (e.g. #/profile) shows its first sub-page.
+    const canonicalPath = `${view.step.path}/${view.sub.slug}`;
+    if (path !== canonicalPath) {
+      replaceLocation(canonicalPath);
+    }
+
+    appRoot.innerHTML = renderLayout(session, renderPrivateArea(session, view.step, view.sub));
+    bindCurrentPage(session);
+    return;
+  }
+
+  // Public routes.
+  const route = publicRoutes.find((candidate) => candidate.path === path) ?? null;
 
   if (!route) {
     appRoot.innerHTML = renderLayout(session, renderNotFound());
-    return;
-  }
-
-  if (route.requiresAuth && !session) {
-    appRoot.innerHTML = renderLayout(session, renderAuthRequired(route.label));
     return;
   }
 
@@ -542,10 +718,7 @@ function renderLayout(session: AuthSession | null, page: string): string {
       <nav class="site-nav" aria-label="Primary navigation">
         ${
           isSignedIn
-            ? privateRoutes
-                .filter((route) => route.nav === 'private')
-                .map((route) => navLink(route.path, route.label))
-                .join('')
+            ? ''
             : publicRoutes
                 .filter((route) => route.nav === 'public')
                 .map((route) => navLink(route.path, route.label))
@@ -555,7 +728,7 @@ function renderLayout(session: AuthSession | null, page: string): string {
       <div class="header-actions">
         ${
           isSignedIn
-            ? `<button class="button button-ghost" type="button" data-action="logout">Sign out</button>`
+            ? renderAccountMenu(session)
             : `<button class="button button-primary" type="button" data-action="login">Sign in</button>`
         }
       </div>
@@ -933,263 +1106,271 @@ function renderAuthRequired(label: string): string {
   `;
 }
 
-function renderPrivatePage(title: string): string {
-  return `
-    <section class="private-shell">
-      <aside class="private-sidebar">
-        <p class="eyebrow">Seafarer portal</p>
-        ${privateRoutes
-          .filter((route) => route.nav === 'private')
-          .map((route) => navLink(route.path, route.label))
-          .join('')}
-      </aside>
-      <section class="private-main">
-        <div class="private-title">
-          <p class="eyebrow">Private</p>
-          <h1>${escapeHtml(title)}</h1>
-        </div>
-        <div class="blank-workspace" aria-label="${escapeHtml(title)} workspace"></div>
-      </section>
-    </section>
-  `;
+function displayName(session: AuthSession | null): string {
+  const name = claimToString(session?.claims.name) ?? claimToString(session?.claims.email);
+  return name ?? 'Seafarer';
 }
 
-function renderCertificates(session: AuthSession | null): string {
-  if (!session) {
-    return renderAuthRequired('Certificates');
+function firstName(session: AuthSession | null): string {
+  const full = displayName(session);
+  const email = claimToString(session?.claims.email);
+  if (full === email && email) {
+    return email.split('@')[0] ?? email;
   }
-
-  const subject = claimToString(session.claims.sub) ?? 'signed-in-user';
-  const items = certificatesState.loadedForSubject === subject ? certificatesState.items : [];
-  const totalCount = items.length;
-  const expiringCount = items.filter((item) => getExpiryStatus(item.expiryDate).kind === 'expiring').length;
-  const expiredCount = items.filter((item) => getExpiryStatus(item.expiryDate).kind === 'expired').length;
-  const reviewCount = items.filter((item) => item.processingStatus === 'REVIEW_REQUIRED').length;
-
-  return `
-    <section class="private-shell">
-      <aside class="private-sidebar">
-        <p class="eyebrow">Seafarer portal</p>
-        ${privateRoutes
-          .filter((route) => route.nav === 'private')
-          .map((route) => navLink(route.path, route.label))
-          .join('')}
-      </aside>
-      <section class="private-main certificate-page" id="certificate-page">
-        <div class="private-title certificate-title-row">
-          <div class="certificate-title-copy">
-            <p class="eyebrow">Private</p>
-            <h1>Certificates</h1>
-            <p class="certificate-subtitle">Documents, expiry dates, and review status in one workspace.</p>
-          </div>
-          <button class="button button-ghost" type="button" data-action="refresh-certificates" ${
-            certificatesState.loading ? 'disabled' : ''
-          }>Refresh</button>
-        </div>
-
-        <div class="certificate-stats" aria-label="Certificate summary">
-          ${certificateStat('Documents', String(totalCount))}
-          ${certificateStat('Expiring soon', String(expiringCount))}
-          ${certificateStat('Expired', String(expiredCount))}
-          ${certificateStat('Needs review', String(reviewCount))}
-        </div>
-
-        <form class="certificate-upload" id="certificate-upload-form">
-          <div class="certificate-upload-copy">
-            <label id="certificate-file-label" for="certificate-file">Certificate or document</label>
-            <span id="certificate-file-hint">PDF, image, text, or Word document</span>
-          </div>
-          <div class="certificate-upload-control">
-            <input
-              class="certificate-file-input"
-              id="certificate-file"
-              name="file"
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.txt,.doc,.docx,application/pdf,image/*,text/plain"
-              aria-labelledby="certificate-file-label"
-              aria-describedby="certificate-file-hint"
-              required
-            />
-            <label class="certificate-file-picker" for="certificate-file">
-              <span class="certificate-file-button">Choose file</span>
-              <span class="certificate-file-name" data-file-name>No file selected</span>
-            </label>
-          </div>
-          <button class="button button-primary" type="submit" ${certificatesState.uploading ? 'disabled' : ''}>
-            ${certificatesState.uploading ? 'Uploading...' : 'Upload'}
-          </button>
-        </form>
-
-        ${renderCertificatesNotice()}
-
-        <div class="certificate-table-wrap">
-          ${renderCertificatesTable(items)}
-        </div>
-      </section>
-    </section>
-  `;
+  return full.split(' ')[0] ?? full;
 }
 
-function certificateStat(label: string, value: string): string {
+function initials(session: AuthSession | null): string {
+  const name = displayName(session);
+  const parts = name.replace(/@.*$/, '').split(/[\s._-]+/).filter(Boolean);
+  const letters = parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase());
+  return letters.join('') || 'SM';
+}
+
+function renderAccountMenu(session: AuthSession | null): string {
   return `
-    <div>
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value)}</strong>
+    <div class="account-menu${accountMenuOpen ? ' is-open' : ''}" data-account-menu>
+      <button
+        class="account-menu-trigger"
+        type="button"
+        data-action="toggle-account-menu"
+        aria-haspopup="true"
+        aria-expanded="${accountMenuOpen ? 'true' : 'false'}"
+      >
+        <span class="account-avatar" aria-hidden="true">${escapeHtml(initials(session))}</span>
+        <span class="account-menu-name">${escapeHtml(firstName(session))}</span>
+        <span class="account-menu-caret" aria-hidden="true">▾</span>
+      </button>
+      <div class="account-menu-panel" role="menu" ${accountMenuOpen ? '' : 'hidden'}>
+        <a role="menuitem" href="#/account">Account</a>
+        <button role="menuitem" type="button" data-action="logout">Log out</button>
+      </div>
     </div>
   `;
 }
 
-function renderCertificatesNotice(): string {
-  if (!certificatesState.notice) {
+function renderPrivateArea(
+  session: AuthSession | null,
+  step: PrivateStep,
+  sub: PrivateSubPage,
+): string {
+  return `
+    <div class="portal">
+      ${renderPrivateStepper(step)}
+      ${renderWelcomeBanner(session)}
+      <section class="portal-shell">
+        <aside class="portal-sidebar" aria-label="${escapeHtml(step.label)} sections">
+          ${renderPrivateSubmenu(step, sub)}
+        </aside>
+        <section class="portal-main">
+          ${renderPrivateSubPage(session, step, sub)}
+        </section>
+      </section>
+    </div>
+  `;
+}
+
+function renderPrivateStepper(activeStep: PrivateStep): string {
+  const steps = privateSteps
+    .map((step, index) => {
+      const active = step.path === activeStep.path;
+      return `
+        <a
+          class="portal-step${active ? ' is-active' : ''}"
+          href="#${step.path}"
+          ${active ? 'aria-current="step"' : ''}
+        >
+          <span class="portal-step-index" aria-hidden="true">${index + 1}</span>
+          <span class="portal-step-icon" aria-hidden="true">${step.icon}</span>
+          <span class="portal-step-label">${escapeHtml(step.label)}</span>
+        </a>
+      `;
+    })
+    .join('');
+
+  return `<nav class="portal-stepper" aria-label="Profile steps">${steps}</nav>`;
+}
+
+function renderWelcomeBanner(session: AuthSession | null): string {
+  if (welcomeBannerDismissed) {
+    return '';
+  }
+
+  return `
+    <div class="portal-banner" role="status">
+      <div class="portal-banner-body">
+        <p><strong>Welcome, ${escapeHtml(firstName(session))}.</strong> You've entered your personal account.</p>
+        <p>Fill in each section and click <strong>Save</strong>. Complete, accurate, and up-to-date
+        information improves your chances of getting a job. Keep validity dates current.</p>
+      </div>
+      <button class="portal-banner-close" type="button" data-action="dismiss-banner" aria-label="Dismiss welcome message">×</button>
+    </div>
+  `;
+}
+
+function renderPrivateSubmenu(step: PrivateStep, activeSub: PrivateSubPage): string {
+  const links = step.subPages
+    .map((page) => {
+      const active = page.slug === activeSub.slug;
+      return `
+        <a
+          class="portal-submenu-link${active ? ' is-active' : ''}"
+          href="#${step.path}/${page.slug}"
+          ${active ? 'aria-current="page"' : ''}
+        >
+          <span class="portal-submenu-icon" aria-hidden="true">${page.icon}</span>
+          <span>${escapeHtml(page.label)}</span>
+        </a>
+      `;
+    })
+    .join('');
+
+  const menu = `<nav class="portal-submenu" aria-label="${escapeHtml(step.label)}">${links}</nav>`;
+
+  // Sea service records has extra controls above the submenu (per PRD §6).
+  if (step.path === '/sea-service') {
+    return `
+      <div class="portal-sea-controls">
+        <label class="portal-checkbox">
+          <input type="checkbox" name="no-sea-service" disabled />
+          <span>I have no sea service records (experience)</span>
+        </label>
+        <p class="portal-hint">Check this box if you currently do not have any sea service records.</p>
+        <button class="button button-primary button-full" type="button" data-action="add-sea-service" disabled>
+          + Add sea service record
+        </button>
+      </div>
+      ${menu}
+    `;
+  }
+
+  return menu;
+}
+
+function renderPrivateSubPage(
+  session: AuthSession | null,
+  step: PrivateStep,
+  sub: PrivateSubPage,
+): string {
+  const head = `
+    <div class="portal-page-head">
+      <p class="eyebrow">${escapeHtml(step.label)}</p>
+      <h1>${escapeHtml(sub.label)}</h1>
+    </div>
+  `;
+
+  const body = renderPrivateSubPageBody(session, step, sub);
+
+  return `${head}${renderPortalNotice(`${step.path}/${sub.slug}`)}${body}`;
+}
+
+function renderPrivateSubPageBody(
+  session: AuthSession | null,
+  step: PrivateStep,
+  sub: PrivateSubPage,
+): string {
+  if (step.path === '/profile' && sub.slug === 'main-information') {
+    return renderMainInformationForm(session);
+  }
+
+  return `
+    <div class="portal-placeholder" aria-label="${escapeHtml(sub.label)} workspace">
+      <p class="portal-placeholder-title">This section is coming soon.</p>
+      <p class="portal-placeholder-note">
+        The <strong>${escapeHtml(sub.label)}</strong> page will be built in an upcoming step.
+      </p>
+    </div>
+  `;
+}
+
+function renderPortalNotice(path: string): string {
+  if (!portalNotice || portalNotice.path !== path) {
     return '';
   }
 
   const noticeClass =
-    certificatesState.noticeKind === 'error'
+    portalNotice.kind === 'error'
       ? 'alert-error'
-      : certificatesState.noticeKind === 'warning'
+      : portalNotice.kind === 'warning'
         ? 'alert-warning'
-        : certificatesState.noticeKind === 'success'
+        : portalNotice.kind === 'success'
           ? 'alert-success'
           : 'alert-info';
 
-  return `<p class="alert ${noticeClass} certificate-notice" role="status">${escapeHtml(certificatesState.notice)}</p>`;
+  return `<p class="alert ${noticeClass} portal-alert" role="status">${escapeHtml(portalNotice.message)}</p>`;
 }
 
-function renderCertificatesTable(items: CertificateRecord[]): string {
-  if (certificatesState.loading) {
-    return `<div class="certificate-empty"><strong>Loading certificates...</strong></div>`;
-  }
+// --- Form field helpers (label-left / control-right rows) --------------------
+function portalFieldRow(id: string, label: string, control: string, required = false): string {
+  return `
+    <div class="portal-field">
+      <label for="${id}">${escapeHtml(label)}${required ? ' <span class="req">*</span>' : ''}</label>
+      <div class="portal-field-control">${control}</div>
+    </div>
+  `;
+}
 
-  if (items.length === 0) {
-    return `
-      <div class="certificate-empty">
-        <strong>No certificates uploaded yet.</strong>
+function portalTextControl(
+  id: string,
+  name: string,
+  value: string,
+  type = 'text',
+  required = false,
+): string {
+  return `<input id="${id}" name="${escapeHtml(name)}" type="${escapeHtml(type)}" value="${escapeHtml(value)}"${required ? ' required' : ''} />`;
+}
+
+function portalSelectControl(
+  id: string,
+  name: string,
+  value: string,
+  options: string[],
+  required = false,
+): string {
+  const opts = [`<option value="">Select</option>`]
+    .concat(
+      options.map(
+        (option) =>
+          `<option value="${escapeHtml(option)}"${option === value ? ' selected' : ''}>${escapeHtml(option)}</option>`,
+      ),
+    )
+    .join('');
+  return `<select id="${id}" name="${escapeHtml(name)}"${required ? ' required' : ''}>${opts}</select>`;
+}
+
+function portalCheckboxControl(id: string, name: string, checked: boolean): string {
+  return `<input id="${id}" name="${escapeHtml(name)}" type="checkbox"${checked ? ' checked' : ''} />`;
+}
+
+function renderMainInformationForm(session: AuthSession | null): string {
+  const data = getMainInformation(session);
+
+  return `
+    <form class="portal-form" id="profile-main-information-form" novalidate>
+      ${portalFieldRow('mi-firstName', 'First name', portalTextControl('mi-firstName', 'firstName', data.firstName, 'text', true), true)}
+      ${portalFieldRow('mi-middleName', 'Middle name', portalTextControl('mi-middleName', 'middleName', data.middleName))}
+      ${portalFieldRow('mi-lastName', 'Last name', portalTextControl('mi-lastName', 'lastName', data.lastName, 'text', true), true)}
+      ${portalFieldRow('mi-sex', 'Sex', portalSelectControl('mi-sex', 'sex', data.sex, SEX_OPTIONS))}
+      ${portalFieldRow('mi-position', 'Position', portalSelectControl('mi-position', 'position', data.position, POSITION_OPTIONS))}
+      ${portalFieldRow('mi-altPosition1', 'Alternate Position 1', portalSelectControl('mi-altPosition1', 'altPosition1', data.altPosition1, POSITION_OPTIONS))}
+      ${portalFieldRow('mi-altPosition2', 'Alternate Position 2', portalSelectControl('mi-altPosition2', 'altPosition2', data.altPosition2, POSITION_OPTIONS))}
+      ${portalFieldRow('mi-altPosition3', 'Alternate Position 3', portalSelectControl('mi-altPosition3', 'altPosition3', data.altPosition3, POSITION_OPTIONS))}
+      ${portalFieldRow('mi-altPosition4', 'Alternate Position 4', portalSelectControl('mi-altPosition4', 'altPosition4', data.altPosition4, POSITION_OPTIONS))}
+      ${portalFieldRow('mi-offshore', 'I want to work in Offshore (Oil/Gas) Industry', portalCheckboxControl('mi-offshore', 'offshore', data.offshore))}
+      ${portalFieldRow('mi-dateOfReadiness', 'Date of readiness', portalTextControl('mi-dateOfReadiness', 'dateOfReadiness', data.dateOfReadiness, 'date'))}
+      ${portalFieldRow('mi-minSalaryUsd', 'Minimum salary you can agree on (USD)', portalTextControl('mi-minSalaryUsd', 'minSalaryUsd', data.minSalaryUsd, 'number'))}
+      ${portalFieldRow('mi-citizenship', 'Citizenship', portalSelectControl('mi-citizenship', 'citizenship', data.citizenship, CITIZENSHIP_OPTIONS))}
+      ${portalFieldRow('mi-placeOfBirth', 'Place of Birth', portalTextControl('mi-placeOfBirth', 'placeOfBirth', data.placeOfBirth))}
+      ${portalFieldRow('mi-dateOfBirth', 'Date of Birth', portalTextControl('mi-dateOfBirth', 'dateOfBirth', data.dateOfBirth, 'date', true), true)}
+      ${portalFieldRow('mi-highestEducation', 'Highest education', portalSelectControl('mi-highestEducation', 'highestEducation', data.highestEducation, EDUCATION_OPTIONS))}
+      ${portalFieldRow('mi-yearGraduated', 'Year you have graduated', portalTextControl('mi-yearGraduated', 'yearGraduated', data.yearGraduated, 'number'))}
+      ${portalFieldRow('mi-graduatedFrom', 'Graduated from', portalTextControl('mi-graduatedFrom', 'graduatedFrom', data.graduatedFrom))}
+      ${portalFieldRow('mi-educationalLevel', 'Educational level', portalTextControl('mi-educationalLevel', 'educationalLevel', data.educationalLevel))}
+      <div class="portal-form-actions">
+        <button class="button button-primary" type="submit">Save</button>
       </div>
-    `;
-  }
-
-  return `
-    <table class="certificate-table">
-      <thead>
-        <tr>
-          <th>Document</th>
-          <th>Rank</th>
-          <th>Expiry</th>
-          <th>Status</th>
-          <th>Uploaded</th>
-          <th><span class="sr-only">Actions</span></th>
-        </tr>
-      </thead>
-      <tbody>
-        ${items.map(renderCertificateRow).join('')}
-      </tbody>
-    </table>
+    </form>
   `;
-}
-
-function renderCertificateRow(item: CertificateRecord): string {
-  const expiryStatus = getExpiryStatus(item.expiryDate);
-  const processingStatus = getProcessingStatus(item.processingStatus);
-  const confidence = typeof item.confidence === 'number' ? `${Math.round(item.confidence * 100)}%` : 'Review';
-
-  return `
-    <tr>
-      <td>
-        <strong>${escapeHtml(item.documentName || item.originalFilename)}</strong>
-        <span>${escapeHtml(item.documentCategory || item.originalFilename)}</span>
-        <small>${escapeHtml(formatFileSize(item.sizeBytes))} &middot; ${escapeHtml(confidence)}</small>
-      </td>
-      <td>${escapeHtml(item.rank || 'Not detected')}</td>
-      <td>
-        <span class="status-pill ${expiryStatus.className}">${escapeHtml(expiryStatus.label)}</span>
-      </td>
-      <td>
-        <span class="status-pill ${processingStatus.className}">${escapeHtml(processingStatus.label)}</span>
-      </td>
-      <td>${escapeHtml(formatDate(item.uploadedAt))}</td>
-      <td>
-        <button
-          class="button button-ghost certificate-action"
-          type="button"
-          data-action="open-certificate"
-          data-certificate-id="${escapeHtml(item.certificateId)}"
-        >View</button>
-      </td>
-    </tr>
-  `;
-}
-
-function getExpiryStatus(expiryDate: string | null | undefined): {
-  kind: 'unknown' | 'valid' | 'expiring' | 'expired';
-  label: string;
-  className: string;
-} {
-  if (!expiryDate) {
-    return { kind: 'unknown', label: 'Unknown', className: 'status-neutral' };
-  }
-
-  const today = startOfToday();
-  const expiry = new Date(`${expiryDate}T00:00:00`);
-  const days = Math.ceil((expiry.getTime() - today.getTime()) / 86_400_000);
-
-  if (Number.isNaN(days)) {
-    return { kind: 'unknown', label: 'Unknown', className: 'status-neutral' };
-  }
-
-  if (days < 0) {
-    return { kind: 'expired', label: 'Expired', className: 'status-danger' };
-  }
-
-  if (days <= 90) {
-    return { kind: 'expiring', label: `${days} days`, className: 'status-warning' };
-  }
-
-  return { kind: 'valid', label: formatDate(expiryDate), className: 'status-good' };
-}
-
-function getProcessingStatus(status: string): { label: string; className: string } {
-  if (status === 'ANALYZED') {
-    return { label: 'Analyzed', className: 'status-good' };
-  }
-  if (status === 'ANALYZING') {
-    return { label: 'Analyzing', className: 'status-neutral' };
-  }
-  if (status === 'REVIEW_REQUIRED') {
-    return { label: 'Review', className: 'status-warning' };
-  }
-  return { label: status || 'Unknown', className: 'status-neutral' };
-}
-
-function startOfToday(): Date {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
-}
-
-function formatDate(value: string): string {
-  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
-}
-
-function formatFileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return '0 KB';
-  }
-
-  if (bytes < 1024 * 1024) {
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function renderAccount(session: AuthSession | null): string {
@@ -1201,34 +1382,32 @@ function renderAccount(session: AuthSession | null): string {
   const subject = claimToString(session.claims.sub) ?? 'Unavailable';
 
   return `
-    <section class="private-shell">
-      <aside class="private-sidebar">
-        <p class="eyebrow">Seafarer portal</p>
-        ${privateRoutes
-          .filter((route) => route.nav === 'private')
-          .map((route) => navLink(route.path, route.label))
-          .join('')}
-      </aside>
-      <section class="private-main">
-        <div class="private-title">
-          <p class="eyebrow">Private</p>
-          <h1>Account</h1>
-        </div>
-        <div class="account-card">
-          <dl>
-            <div>
-              <dt>Email</dt>
-              <dd>${escapeHtml(email)}</dd>
+    <div class="portal">
+      <section class="portal-shell portal-shell-single">
+        <section class="portal-main">
+          <div class="portal-page-head">
+            <p class="eyebrow">Account</p>
+            <h1>Your account</h1>
+          </div>
+          <div class="account-card">
+            <dl>
+              <div>
+                <dt>Email</dt>
+                <dd>${escapeHtml(email)}</dd>
+              </div>
+              <div>
+                <dt>User ID</dt>
+                <dd>${escapeHtml(subject)}</dd>
+              </div>
+            </dl>
+            <div class="account-card-actions">
+              <a class="button button-secondary" href="#${DEFAULT_PRIVATE_PATH}">Back to profile</a>
+              <button class="button button-ghost" type="button" data-action="logout">Log out</button>
             </div>
-            <div>
-              <dt>User ID</dt>
-              <dd>${escapeHtml(subject)}</dd>
-            </div>
-          </dl>
-          <button class="button button-ghost" type="button" data-action="logout">Sign out</button>
-        </div>
+          </div>
+        </section>
       </section>
-    </section>
+    </div>
   `;
 }
 
@@ -1347,23 +1526,6 @@ function bindCurrentPage(session: AuthSession | null): void {
       });
     });
   }
-
-  const certificatePage = document.querySelector<HTMLElement>('#certificate-page');
-
-  if (certificatePage && session) {
-    const fileInput = certificatePage.querySelector<HTMLInputElement>('#certificate-file');
-    const fileName = certificatePage.querySelector<HTMLElement>('[data-file-name]');
-
-    if (fileInput && fileName) {
-      fileInput.addEventListener('change', () => {
-        const selectedFile = fileInput.files?.[0];
-        fileName.textContent = selectedFile?.name ?? 'No file selected';
-        fileName.title = selectedFile?.name ?? '';
-      });
-    }
-
-    void loadCertificates(session);
-  }
 }
 
 async function handleSubmit(event: SubmitEvent): Promise<void> {
@@ -1373,9 +1535,9 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
     return;
   }
 
-  if (form.id === 'certificate-upload-form') {
+  if (form.id === 'profile-main-information-form') {
     event.preventDefault();
-    await handleCertificateUpload(form);
+    handleMainInformationSave(form);
     return;
   }
 
@@ -1401,45 +1563,12 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
   }
 }
 
-async function loadCertificates(session: AuthSession, force = false): Promise<void> {
-  const subject = claimToString(session.claims.sub) ?? 'signed-in-user';
-
-  if (!force && certificatesState.loadedForSubject === subject) {
-    return;
-  }
-
-  certificatesState = {
-    ...certificatesState,
-    loading: true,
-    loadedForSubject: subject,
-    notice: force ? 'Refreshing certificates...' : certificatesState.notice,
-    noticeKind: 'info',
-  };
-  renderApp();
-
-  try {
-    const items = await apiRequest<CertificateRecord[]>('/api/customer/certificates', session);
-    certificatesState = {
-      ...certificatesState,
-      items,
-      loading: false,
-      loadedForSubject: subject,
-      notice: items.length ? '' : 'No certificate records yet.',
-      noticeKind: 'info',
-    };
-  } catch (error) {
-    certificatesState = {
-      ...certificatesState,
-      loading: false,
-      notice: normalizeError(error).message,
-      noticeKind: 'error',
-    };
-  }
-
-  renderApp();
+function formCheckbox(form: HTMLFormElement, name: string): boolean {
+  const field = form.elements.namedItem(name);
+  return field instanceof HTMLInputElement ? field.checked : false;
 }
 
-async function handleCertificateUpload(form: HTMLFormElement): Promise<void> {
+function handleMainInformationSave(form: HTMLFormElement): void {
   const session = getSession();
 
   if (!session) {
@@ -1451,93 +1580,35 @@ async function handleCertificateUpload(form: HTMLFormElement): Promise<void> {
     return;
   }
 
-  const fileInput = form.elements.namedItem('file');
-  const file = fileInput instanceof HTMLInputElement ? fileInput.files?.[0] : null;
+  const data: MainInformation = {
+    firstName: getFormValue(form, 'firstName'),
+    middleName: getFormValue(form, 'middleName'),
+    lastName: getFormValue(form, 'lastName'),
+    sex: getFormValue(form, 'sex'),
+    position: getFormValue(form, 'position'),
+    altPosition1: getFormValue(form, 'altPosition1'),
+    altPosition2: getFormValue(form, 'altPosition2'),
+    altPosition3: getFormValue(form, 'altPosition3'),
+    altPosition4: getFormValue(form, 'altPosition4'),
+    offshore: formCheckbox(form, 'offshore'),
+    dateOfReadiness: getFormValue(form, 'dateOfReadiness'),
+    minSalaryUsd: getFormValue(form, 'minSalaryUsd'),
+    citizenship: getFormValue(form, 'citizenship'),
+    placeOfBirth: getFormValue(form, 'placeOfBirth'),
+    dateOfBirth: getFormValue(form, 'dateOfBirth'),
+    highestEducation: getFormValue(form, 'highestEducation'),
+    yearGraduated: getFormValue(form, 'yearGraduated'),
+    graduatedFrom: getFormValue(form, 'graduatedFrom'),
+    educationalLevel: getFormValue(form, 'educationalLevel'),
+  };
 
-  if (!file) {
-    certificatesState = {
-      ...certificatesState,
-      notice: 'Choose a certificate file to upload.',
-      noticeKind: 'error',
-    };
-    renderApp();
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append('file', file);
-  certificatesState = {
-    ...certificatesState,
-    uploading: true,
-    notice: 'Uploading certificate...',
-    noticeKind: 'info',
+  saveProfileSection(session, 'mainInformation', data);
+  portalNotice = {
+    path: '/profile/main-information',
+    message: 'Main information saved.',
+    kind: 'success',
   };
   renderApp();
-
-  try {
-    const uploaded = await apiRequest<CertificateRecord>('/api/customer/certificates', session, {
-      method: 'POST',
-      body: formData,
-    });
-    certificatesState = {
-      ...certificatesState,
-      uploading: false,
-      notice: `${uploaded.documentName || uploaded.originalFilename} uploaded.`,
-      noticeKind: uploaded.processingStatus === 'REVIEW_REQUIRED' ? 'warning' : 'success',
-    };
-    await loadCertificates(session, true);
-  } catch (error) {
-    certificatesState = {
-      ...certificatesState,
-      uploading: false,
-      notice: normalizeError(error).message,
-      noticeKind: 'error',
-    };
-    renderApp();
-  }
-}
-
-async function openCertificate(certificateId: string): Promise<void> {
-  const session = getSession();
-
-  if (!session) {
-    startLogin();
-    return;
-  }
-
-  try {
-    certificatesState = {
-      ...certificatesState,
-      notice: 'Preparing document link...',
-      noticeKind: 'info',
-    };
-    renderApp();
-    const response = await apiRequest<DownloadUrlResponse>(
-      `/api/customer/certificates/${encodeURIComponent(certificateId)}/download-url`,
-      session,
-    );
-    certificatesState = { ...certificatesState, notice: '', noticeKind: 'info' };
-    renderApp();
-    window.open(response.url, '_blank', 'noopener,noreferrer');
-  } catch (error) {
-    certificatesState = {
-      ...certificatesState,
-      notice: normalizeError(error).message,
-      noticeKind: 'error',
-    };
-    renderApp();
-  }
-}
-
-async function refreshCertificates(): Promise<void> {
-  const session = getSession();
-
-  if (!session) {
-    startLogin();
-    return;
-  }
-
-  await loadCertificates(session, true);
 }
 
 async function apiRequest<T>(
@@ -1561,7 +1632,6 @@ async function apiRequest<T>(
 
   if (response.status === 401) {
     clearSession();
-    resetCertificateState();
     throw new Error('Your session expired. Sign in again.');
   }
 
@@ -1615,7 +1685,7 @@ async function handleAuthSubmit(form: HTMLFormElement): Promise<void> {
       saveSession(session);
       pendingEmail = '';
       pendingPasswordForAutoSignIn = '';
-      replaceLocation('/dashboard');
+      replaceLocation('/profile');
       renderApp();
       return;
     }
@@ -1633,7 +1703,7 @@ async function handleAuthSubmit(form: HTMLFormElement): Promise<void> {
       if (result.userConfirmed) {
         const session = await signInWithCognito(email, password);
         saveSession(session);
-        replaceLocation('/dashboard');
+        replaceLocation('/profile');
         renderApp();
         return;
       }
@@ -1654,7 +1724,7 @@ async function handleAuthSubmit(form: HTMLFormElement): Promise<void> {
         const session = await signInWithCognito(email, pendingPasswordForAutoSignIn);
         saveSession(session);
         pendingPasswordForAutoSignIn = '';
-        replaceLocation('/dashboard');
+        replaceLocation('/profile');
         renderApp();
         return;
       }
@@ -1729,7 +1799,29 @@ function handleClick(event: MouseEvent): void {
   const actionElement = target.closest<HTMLElement>('[data-action]');
   const action = actionElement?.dataset.action;
 
+  // Close the account menu on any click that is not the menu trigger itself.
+  if (accountMenuOpen && action !== 'toggle-account-menu') {
+    accountMenuOpen = false;
+    if (!action) {
+      renderApp();
+      return;
+    }
+  }
+
   if (!action) {
+    return;
+  }
+
+  if (action === 'toggle-account-menu') {
+    accountMenuOpen = !accountMenuOpen;
+    renderApp();
+    return;
+  }
+
+  if (action === 'dismiss-banner') {
+    welcomeBannerDismissed = true;
+    window.sessionStorage.setItem(storageKeys.bannerDismissed, '1');
+    renderApp();
     return;
   }
 
@@ -1751,18 +1843,6 @@ function handleClick(event: MouseEvent): void {
 
   if (action === 'resend-code') {
     void handleResendCode();
-  }
-
-  if (action === 'refresh-certificates') {
-    void refreshCertificates();
-  }
-
-  if (action === 'open-certificate') {
-    const certificateId = actionElement.dataset.certificateId;
-
-    if (certificateId) {
-      void openCertificate(certificateId);
-    }
   }
 
   if (action === 'toggle-menu') {
@@ -1807,6 +1887,12 @@ appRoot.addEventListener('click', handleClick);
 appRoot.addEventListener('submit', (event) => {
   void handleSubmit(event);
 });
-window.addEventListener('hashchange', renderApp);
+window.addEventListener('hashchange', () => {
+  // Drop any per-page notice when the user navigates to a different page.
+  if (portalNotice && portalNotice.path !== getCurrentPath()) {
+    portalNotice = null;
+  }
+  renderApp();
+});
 
 renderApp();
