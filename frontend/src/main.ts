@@ -287,14 +287,20 @@ const EDUCATION_OPTIONS = [
 
 // Load all profile sections for the signed-in user from the backend once per
 // session (per Cognito subject). Errors are surfaced but do not block editing.
+//
+// IMPORTANT: this is triggered from bindCurrentPage on every render, and it
+// calls renderApp() itself, so the guard must hold *synchronously* to avoid an
+// infinite loop. We mark loadedForSubject BEFORE the first renderApp and treat
+// an errored attempt as "attempted" too (retry is explicit via force), so a
+// failing request cannot retrigger itself endlessly.
 async function loadProfileFromApi(session: AuthSession, force = false): Promise<void> {
   const subject = claimToString(session.claims.sub) ?? 'anonymous';
 
-  if (!force && profileState.loadedForSubject === subject && !profileState.error) {
+  if (!force && profileState.loadedForSubject === subject) {
     return;
   }
 
-  profileState = { ...profileState, loading: true, error: '' };
+  profileState = { ...profileState, loading: true, loadedForSubject: subject, error: '' };
   renderApp();
 
   try {
@@ -1415,7 +1421,10 @@ function renderMainInformationForm(session: AuthSession | null): string {
 
   const data = getMainInformation(session);
   const loadError = profileState.error
-    ? `<p class="alert alert-error portal-alert" role="status">${escapeHtml(profileState.error)}</p>`
+    ? `<div class="alert alert-error portal-alert" role="status">
+         <span>Could not load your saved profile: ${escapeHtml(profileState.error)}</span>
+         <button class="button button-ghost" type="button" data-action="retry-profile">Retry</button>
+       </div>`
     : '';
 
   return `
@@ -1949,6 +1958,13 @@ function handleClick(event: MouseEvent): void {
 
   if (action === 'resend-code') {
     void handleResendCode();
+  }
+
+  if (action === 'retry-profile') {
+    const session = getSession();
+    if (session) {
+      void loadProfileFromApi(session, true);
+    }
   }
 
   if (action === 'toggle-menu') {
