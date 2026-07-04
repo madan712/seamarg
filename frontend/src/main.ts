@@ -211,9 +211,26 @@ type MainInformation = {
   educationalLevel: string;
 };
 
-type ProfileData = {
-  mainInformation?: Partial<MainInformation>;
+// Profile sections loaded from the backend, keyed by section slug (e.g. "main").
+type ProfileSections = Record<string, Record<string, unknown>>;
+
+type ProfileState = {
+  loadedForSubject: string | null;
+  loading: boolean;
+  sections: ProfileSections;
+  error: string;
 };
+
+let profileState: ProfileState = {
+  loadedForSubject: null,
+  loading: false,
+  sections: {},
+  error: '',
+};
+
+function resetProfileState(): void {
+  profileState = { loadedForSubject: null, loading: false, sections: {}, error: '' };
+}
 
 // Dummy option lists — replaced with real reference data later (PRD §9).
 const SEX_OPTIONS = ['Male', 'Female'];
@@ -268,57 +285,80 @@ const EDUCATION_OPTIONS = [
   'Other',
 ];
 
-function profileStorageKey(session: AuthSession | null): string {
-  const subject = claimToString(session?.claims.sub) ?? 'anonymous';
-  return `seamarg.profile.${subject}`;
-}
+// Load all profile sections for the signed-in user from the backend once per
+// session (per Cognito subject). Errors are surfaced but do not block editing.
+async function loadProfileFromApi(session: AuthSession, force = false): Promise<void> {
+  const subject = claimToString(session.claims.sub) ?? 'anonymous';
 
-function loadProfile(session: AuthSession | null): ProfileData {
-  try {
-    const raw = window.localStorage.getItem(profileStorageKey(session));
-    return raw ? (JSON.parse(raw) as ProfileData) : {};
-  } catch {
-    return {};
+  if (!force && profileState.loadedForSubject === subject && !profileState.error) {
+    return;
   }
+
+  profileState = { ...profileState, loading: true, error: '' };
+  renderApp();
+
+  try {
+    const sections = await apiRequest<ProfileSections>('/api/customer/profile', session);
+    profileState = {
+      loadedForSubject: subject,
+      loading: false,
+      sections: sections ?? {},
+      error: '',
+    };
+  } catch (error) {
+    profileState = {
+      loadedForSubject: subject,
+      loading: false,
+      sections: {},
+      error: normalizeError(error).message,
+    };
+  }
+
+  renderApp();
 }
 
-function saveProfileSection<K extends keyof ProfileData>(
-  session: AuthSession | null,
-  section: K,
-  data: ProfileData[K],
-): void {
-  const profile = loadProfile(session);
-  profile[section] = data;
-  window.localStorage.setItem(profileStorageKey(session), JSON.stringify(profile));
+function savedSection(slug: string): Record<string, unknown> {
+  return profileState.sections[slug] ?? {};
 }
 
-// Prefill main information from any saved draft, falling back to Cognito claims.
+function savedString(section: Record<string, unknown>, key: string, fallback = ''): string {
+  const value = section[key];
+  return typeof value === 'string' ? value : fallback;
+}
+
+// Prefill main information from the loaded profile, falling back to Cognito claims.
 function getMainInformation(session: AuthSession | null): MainInformation {
-  const saved = loadProfile(session).mainInformation ?? {};
+  const saved = savedSection('main');
+  const claim = (key: string) => claimToString(session?.claims[key]);
   const fullName = displayName(session);
   const email = claimToString(session?.claims.email);
   const nameParts = fullName && fullName !== email ? fullName.split(/\s+/).filter(Boolean) : [];
+  const offshore = saved.offshore;
 
   return {
-    firstName: saved.firstName ?? nameParts[0] ?? '',
-    middleName: saved.middleName ?? '',
-    lastName: saved.lastName ?? (nameParts.length > 1 ? nameParts.slice(1).join(' ') : ''),
-    sex: saved.sex ?? '',
-    position: saved.position ?? '',
-    altPosition1: saved.altPosition1 ?? '',
-    altPosition2: saved.altPosition2 ?? '',
-    altPosition3: saved.altPosition3 ?? '',
-    altPosition4: saved.altPosition4 ?? '',
-    offshore: saved.offshore ?? false,
-    dateOfReadiness: saved.dateOfReadiness ?? '',
-    minSalaryUsd: saved.minSalaryUsd ?? '',
-    citizenship: saved.citizenship ?? '',
-    placeOfBirth: saved.placeOfBirth ?? '',
-    dateOfBirth: saved.dateOfBirth ?? '',
-    highestEducation: saved.highestEducation ?? '',
-    yearGraduated: saved.yearGraduated ?? '',
-    graduatedFrom: saved.graduatedFrom ?? '',
-    educationalLevel: saved.educationalLevel ?? '',
+    firstName: savedString(saved, 'firstName', claim('given_name') ?? nameParts[0] ?? ''),
+    middleName: savedString(saved, 'middleName'),
+    lastName: savedString(
+      saved,
+      'lastName',
+      claim('family_name') ?? (nameParts.length > 1 ? nameParts.slice(1).join(' ') : ''),
+    ),
+    sex: savedString(saved, 'sex'),
+    position: savedString(saved, 'position'),
+    altPosition1: savedString(saved, 'altPosition1'),
+    altPosition2: savedString(saved, 'altPosition2'),
+    altPosition3: savedString(saved, 'altPosition3'),
+    altPosition4: savedString(saved, 'altPosition4'),
+    offshore: typeof offshore === 'boolean' ? offshore : false,
+    dateOfReadiness: savedString(saved, 'dateOfReadiness'),
+    minSalaryUsd: savedString(saved, 'minSalaryUsd'),
+    citizenship: savedString(saved, 'citizenship'),
+    placeOfBirth: savedString(saved, 'placeOfBirth'),
+    dateOfBirth: savedString(saved, 'dateOfBirth', claim('birthdate') ?? ''),
+    highestEducation: savedString(saved, 'highestEducation'),
+    yearGraduated: savedString(saved, 'yearGraduated'),
+    graduatedFrom: savedString(saved, 'graduatedFrom'),
+    educationalLevel: savedString(saved, 'educationalLevel'),
   };
 }
 
@@ -487,10 +527,26 @@ function signInWithCognito(email: string, password: string): Promise<AuthSession
   });
 }
 
-function signUpWithCognito(email: string, password: string, name: string): Promise<ISignUpResult> {
+type SignUpProfile = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  birthdate: string;
+};
+
+function signUpWithCognito(
+  email: string,
+  password: string,
+  profile: SignUpProfile,
+): Promise<ISignUpResult> {
+  const fullName = `${profile.firstName} ${profile.lastName}`.trim();
   const attributes = [
     new CognitoUserAttribute({ Name: 'email', Value: email }),
-    ...(name ? [new CognitoUserAttribute({ Name: 'name', Value: name })] : []),
+    ...(profile.firstName ? [new CognitoUserAttribute({ Name: 'given_name', Value: profile.firstName })] : []),
+    ...(profile.lastName ? [new CognitoUserAttribute({ Name: 'family_name', Value: profile.lastName })] : []),
+    ...(fullName ? [new CognitoUserAttribute({ Name: 'name', Value: fullName })] : []),
+    ...(profile.phone ? [new CognitoUserAttribute({ Name: 'phone_number', Value: profile.phone })] : []),
+    ...(profile.birthdate ? [new CognitoUserAttribute({ Name: 'birthdate', Value: profile.birthdate })] : []),
   ];
 
   return new Promise((resolve, reject) => {
@@ -615,6 +671,7 @@ function signOut(): void {
   }
 
   clearSession();
+  resetProfileState();
   setPath('/');
   renderApp();
 }
@@ -1002,8 +1059,11 @@ function renderAuthForm(): string {
   if (authMode === 'signup') {
     return `
       <form class="auth-form" id="auth-signup">
-        ${inputField('name', 'Full name', 'text', 'name')}
+        ${inputField('firstName', 'First name (as in passport)', 'text', 'given-name')}
+        ${inputField('lastName', 'Last name (as in passport)', 'text', 'family-name')}
         ${inputField('email', 'Email', 'email', 'email')}
+        ${inputField('phone', 'Mobile phone (international format, e.g. +919892558621)', 'tel', 'tel')}
+        ${inputField('birthdate', 'Birth date', 'date', 'bday')}
         ${inputField('password', 'Password', 'password', 'new-password', 12)}
         ${inputField('confirmPassword', 'Confirm password', 'password', 'new-password', 12)}
         <button class="button button-primary button-full" type="submit">Create account</button>
@@ -1343,9 +1403,23 @@ function portalCheckboxControl(id: string, name: string, checked: boolean): stri
 }
 
 function renderMainInformationForm(session: AuthSession | null): string {
+  const subject = claimToString(session?.claims.sub);
+
+  if (profileState.loading && profileState.loadedForSubject !== subject) {
+    return `
+      <div class="portal-placeholder" aria-live="polite">
+        <p class="portal-placeholder-title">Loading your profile…</p>
+      </div>
+    `;
+  }
+
   const data = getMainInformation(session);
+  const loadError = profileState.error
+    ? `<p class="alert alert-error portal-alert" role="status">${escapeHtml(profileState.error)}</p>`
+    : '';
 
   return `
+    ${loadError}
     <form class="portal-form" id="profile-main-information-form" novalidate>
       ${portalFieldRow('mi-firstName', 'First name', portalTextControl('mi-firstName', 'firstName', data.firstName, 'text', true), true)}
       ${portalFieldRow('mi-middleName', 'Middle name', portalTextControl('mi-middleName', 'middleName', data.middleName))}
@@ -1526,6 +1600,11 @@ function bindCurrentPage(session: AuthSession | null): void {
       });
     });
   }
+
+  // Load the seafarer profile once when entering any "Your profile" page.
+  if (session && getCurrentPath().startsWith('/profile')) {
+    void loadProfileFromApi(session);
+  }
 }
 
 async function handleSubmit(event: SubmitEvent): Promise<void> {
@@ -1537,7 +1616,7 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
 
   if (form.id === 'profile-main-information-form') {
     event.preventDefault();
-    handleMainInformationSave(form);
+    await handleMainInformationSave(form);
     return;
   }
 
@@ -1568,7 +1647,7 @@ function formCheckbox(form: HTMLFormElement, name: string): boolean {
   return field instanceof HTMLInputElement ? field.checked : false;
 }
 
-function handleMainInformationSave(form: HTMLFormElement): void {
+async function handleMainInformationSave(form: HTMLFormElement): Promise<void> {
   const session = getSession();
 
   if (!session) {
@@ -1602,12 +1681,25 @@ function handleMainInformationSave(form: HTMLFormElement): void {
     educationalLevel: getFormValue(form, 'educationalLevel'),
   };
 
-  saveProfileSection(session, 'mainInformation', data);
-  portalNotice = {
-    path: '/profile/main-information',
-    message: 'Main information saved.',
-    kind: 'success',
-  };
+  const path = '/profile/main-information';
+  portalNotice = { path, message: 'Saving…', kind: 'info' };
+  renderApp();
+
+  try {
+    const saved = await apiRequest<Record<string, unknown>>('/api/customer/profile/main', session, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    profileState = {
+      ...profileState,
+      sections: { ...profileState.sections, main: saved ?? data },
+    };
+    portalNotice = { path, message: 'Main information saved.', kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
   renderApp();
 }
 
@@ -1696,7 +1788,21 @@ async function handleAuthSubmit(form: HTMLFormElement): Promise<void> {
         return;
       }
 
-      const result = await signUpWithCognito(email, password, getFormValue(form, 'name'));
+      const phone = getFormValue(form, 'phone');
+      if (phone && !/^\+[1-9]\d{6,14}$/.test(phone)) {
+        setAuthNotice(
+          'Enter your mobile phone in international format, e.g. +919892558621.',
+          'error',
+        );
+        return;
+      }
+
+      const result = await signUpWithCognito(email, password, {
+        firstName: getFormValue(form, 'firstName'),
+        lastName: getFormValue(form, 'lastName'),
+        phone,
+        birthdate: getFormValue(form, 'birthdate'),
+      });
       pendingEmail = email;
       pendingPasswordForAutoSignIn = password;
 

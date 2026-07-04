@@ -115,8 +115,14 @@ role already has item access to this table.
    `seamarg.app-data.table-name` property and **PUT** to the CORS allowed methods. `./gradlew
    :backend:test` passes (added `ProfileServiceTests` + profile cases in `EndpointSecurityTests`).
    **Deploy:** pipeline `target: backend`.
-3. **Frontend signup:** first/last/phone/DOB fields → Cognito attributes.
-4. **Frontend Main Information:** switch from localStorage to `GET`/`PUT` profile API + ID-token prefill.
+3. ✅ **Frontend signup (done, 2026-07-05 — needs frontend deploy):** signup form now collects
+   First name, Last name, Email, Mobile phone (E.164, client-validated), Birth date, Password.
+   `signUpWithCognito` sets `given_name`, `family_name`, `name`, `phone_number`, `birthdate`.
+4. ✅ **Frontend Main Information (done, 2026-07-05 — needs frontend deploy):** replaced localStorage
+   with `GET /api/customer/profile` (load/prefill) and `PUT /api/customer/profile/main` (save), via
+   the existing bearer-token `apiRequest`. Prefills from the loaded section, falling back to ID-token
+   claims (`given_name`/`family_name`/`birthdate`). Loading + load-error + saved states handled;
+   required-field validation still blocks the API call. Verified in-browser against a stubbed API.
 5. Repeat step 4's pattern for the remaining Step-1 sections, then certificates + sea service.
 
 ### Endpoint contract (as built)

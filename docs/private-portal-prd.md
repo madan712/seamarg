@@ -365,11 +365,13 @@ A pragmatic page-by-page sequence once the PRD is approved:
    area (Dashboard/AI/Career) and the certificate POC were removed. All sub-pages currently render
    a "coming soon" placeholder. Build + typecheck pass.
 2. Step 1 sub-pages (Main information → … → Notes and miscellaneous).
-   - ✅ **Main information (done, 2026-07-04)**: full form per §4.2 with dummy dropdowns
-     (sex, position/alternate positions, citizenship, highest education), required-field validation
-     (First name, Last name, Date of Birth), and save-per-section. First/last name prefill from the
-     Cognito `name` claim. **"Highest education" is a dropdown** (per decision). Data persists as a
-     client-side draft (localStorage keyed by Cognito subject) until the backend profile API exists.
+   - ✅ **Main information (done, 2026-07-04; API-wired 2026-07-05)**: full form per §4.2 with dummy
+     dropdowns (sex, position/alternate positions, citizenship, highest education), required-field
+     validation (First name, Last name, Date of Birth), and save-per-section. Now persists to
+     **DynamoDB via the backend profile API** (`GET`/`PUT /api/customer/profile`), prefilling from
+     the saved section or Cognito ID-token claims (`given_name`/`family_name`/`birthdate`). Signup
+     now captures first/last name, mobile phone, and birth date into Cognito. **"Highest education"
+     is a dropdown**. See `docs/profile-data-design.md`.
 3. Step 2 Main documents, then the detailed certificate accordions (with file upload).
 4. Step 3 Sea service records (add/edit/list).
 
