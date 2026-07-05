@@ -63,10 +63,13 @@ class CertificateEntryController {
 
 	@GetMapping("/{category}/{type}/download-url")
 	DownloadUrlResponse downloadUrl(@PathVariable String category, @PathVariable String type,
+			@RequestParam(name = "disposition", defaultValue = "inline") String disposition,
 			JwtAuthenticationToken authentication) {
 		var certificateCategory = CertificateCategory.fromSlug(category)
 			.orElseThrow(() -> new IllegalArgumentException("Unknown certificate category: " + category));
-		var url = certificateFileService.createDownloadUrl(userId(authentication), certificateCategory, type);
+		var asAttachment = "attachment".equalsIgnoreCase(disposition);
+		var url = certificateFileService.createDownloadUrl(userId(authentication), certificateCategory, type,
+			asAttachment);
 		return new DownloadUrlResponse(url.toString(), Instant.now().plus(certificateSettings.downloadUrlTtl()));
 	}
 

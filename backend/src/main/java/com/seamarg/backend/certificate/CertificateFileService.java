@@ -61,7 +61,7 @@ class CertificateFileService {
 		return new FileUploadResult(extraction, metadata);
 	}
 
-	URL createDownloadUrl(String userId, CertificateCategory category, String typeSlug) {
+	URL createDownloadUrl(String userId, CertificateCategory category, String typeSlug, boolean asAttachment) {
 		var payload = repository.findPayload(userId, category.sortKey(typeSlug))
 			.orElseThrow(() -> new IllegalArgumentException("No saved certificate for this type."));
 		var fields = parse(payload);
@@ -74,7 +74,7 @@ class CertificateFileService {
 		if (!StringUtils.hasText(bucketName) || !StringUtils.hasText(objectKey)) {
 			throw new IllegalArgumentException("No file is attached to this certificate.");
 		}
-		return documentStorage.createDownloadUrl(bucketName, objectKey, string(fileMap, "originalFilename"));
+		return documentStorage.createDownloadUrl(bucketName, objectKey, string(fileMap, "originalFilename"), asAttachment);
 	}
 
 	private void validate(MultipartFile file) {

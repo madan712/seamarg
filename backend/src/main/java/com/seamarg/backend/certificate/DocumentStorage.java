@@ -8,5 +8,5 @@ interface DocumentStorage {
 
 	URL createDownloadUrl(CertificateRecord certificate);
 
-	URL createDownloadUrl(String bucketName, String objectKey, String filename);
+	URL createDownloadUrl(String bucketName, String objectKey, String filename, boolean asAttachment);
 }

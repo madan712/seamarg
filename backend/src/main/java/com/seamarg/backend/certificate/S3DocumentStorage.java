@@ -49,29 +49,17 @@ class S3DocumentStorage implements DocumentStorage {
 
 	@Override
 	public URL createDownloadUrl(CertificateRecord certificate) {
-		var disposition = ContentDisposition.inline()
-			.filename(sanitizeFilename(certificate.originalFilename()))
-			.build()
-			.toString();
-		var getObjectRequest = GetObjectRequest.builder()
-			.bucket(certificate.bucketName())
-			.key(certificate.objectKey())
-			.responseContentDisposition(disposition)
-			.build();
-		var presignRequest = GetObjectPresignRequest.builder()
-			.signatureDuration(settings.downloadUrlTtl())
-			.getObjectRequest(getObjectRequest)
-			.build();
-
-		return s3Presigner.presignGetObject(presignRequest).url();
+		return presignedUrl(certificate.bucketName(), certificate.objectKey(), certificate.originalFilename(), false);
 	}
 
 	@Override
-	public URL createDownloadUrl(String bucketName, String objectKey, String filename) {
-		var disposition = ContentDisposition.inline()
-			.filename(sanitizeFilename(filename))
-			.build()
-			.toString();
+	public URL createDownloadUrl(String bucketName, String objectKey, String filename, boolean asAttachment) {
+		return presignedUrl(bucketName, objectKey, filename, asAttachment);
+	}
+
+	private URL presignedUrl(String bucketName, String objectKey, String filename, boolean asAttachment) {
+		var builder = asAttachment ? ContentDisposition.attachment() : ContentDisposition.inline();
+		var disposition = builder.filename(sanitizeFilename(filename)).build().toString();
 		var getObjectRequest = GetObjectRequest.builder()
 			.bucket(bucketName)
 			.key(objectKey)

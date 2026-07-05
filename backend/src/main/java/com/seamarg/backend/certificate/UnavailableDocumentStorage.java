@@ -18,7 +18,7 @@ class UnavailableDocumentStorage implements DocumentStorage {
 	}
 
 	@Override
-	public URL createDownloadUrl(String bucketName, String objectKey, String filename) {
+	public URL createDownloadUrl(String bucketName, String objectKey, String filename, boolean asAttachment) {
 		throw new StorageUnavailableException(
 			"Certificate document storage is not configured. Set SEAMARG_DOCUMENT_BUCKET for the backend.");
 	}

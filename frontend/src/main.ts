@@ -2128,6 +2128,7 @@ function renderCertificateEntry(category: string, type: CertificateType): string
           ? `<p class="certificate-file-current">Attached: <strong>${escapeHtml(fileMeta.originalFilename)}</strong>${
               savedFile?.objectKey
                 ? ` · <button type="button" class="link-button" data-action="view-certificate-file" data-cert-category="${escapeHtml(category)}" data-cert-type="${escapeHtml(type.slug)}">View file</button>`
+                  + ` · <button type="button" class="link-button" data-action="download-certificate-file" data-cert-category="${escapeHtml(category)}" data-cert-type="${escapeHtml(type.slug)}">Download</button>`
                 : ' <span class="certificate-file-pending">(save to keep)</span>'
             }</p>`
           : ''
@@ -3409,14 +3410,33 @@ async function handleCertificateFileUpload(
   renderApp();
 }
 
-async function openCertificateFile(session: AuthSession, category: string, typeSlug: string): Promise<void> {
+async function openCertificateFile(
+  session: AuthSession,
+  category: string,
+  typeSlug: string,
+  asAttachment = false,
+): Promise<void> {
   const path = `/certificates/${category}`;
   try {
+    const query = asAttachment ? '?disposition=attachment' : '';
     const result = await apiRequest<{ url?: string }>(
-      `/api/customer/certificates/${category}/${typeSlug}/download-url`,
+      `/api/customer/certificates/${category}/${typeSlug}/download-url${query}`,
       session,
     );
-    if (result?.url) {
+    if (!result?.url) {
+      return;
+    }
+    if (asAttachment) {
+      // The presigned URL carries Content-Disposition: attachment, so a plain
+      // navigation triggers a download without leaving the page.
+      const anchor = document.createElement('a');
+      anchor.href = result.url;
+      anchor.rel = 'noopener';
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } else {
       window.open(result.url, '_blank', 'noopener');
     }
   } catch (error) {
@@ -3778,12 +3798,12 @@ function handleClick(event: MouseEvent): void {
     }
   }
 
-  if (action === 'view-certificate-file') {
+  if (action === 'view-certificate-file' || action === 'download-certificate-file') {
     const category = actionElement.getAttribute('data-cert-category');
     const typeSlug = actionElement.getAttribute('data-cert-type');
     const session = getSession();
     if (session && category && typeSlug) {
-      void openCertificateFile(session, category, typeSlug);
+      void openCertificateFile(session, category, typeSlug, action === 'download-certificate-file');
     }
   }
 
