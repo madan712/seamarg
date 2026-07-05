@@ -82,4 +82,13 @@ class CertificateInfrastructureConfig {
 
 		return new DynamoDbCertificateRepository(settings, dynamoDbClient);
 	}
+
+	@Bean
+	CertificateDataRepository certificateDataRepository(CertificateSettings settings, DynamoDbClient dynamoDbClient) {
+		if (!StringUtils.hasText(settings.appDataTableName())) {
+			return new InMemoryCertificateDataRepository();
+		}
+
+		return new DynamoDbCertificateDataRepository(settings, dynamoDbClient);
+	}
 }

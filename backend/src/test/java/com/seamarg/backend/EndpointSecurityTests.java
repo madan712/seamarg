@@ -118,6 +118,91 @@ class EndpointSecurityTests {
 	}
 
 	@Test
+	void customerMainDocumentsRequiresJwt() throws Exception {
+		mockMvc.perform(get("/api/customer/certificates/main-documents")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void customerMainDocumentsReturnsSavedChecklistForSameUser() throws Exception {
+		mockMvc.perform(put("/api/customer/certificates/main-documents")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"foet\":true,\"highVoltage\":false}")
+				.with(jwt().jwt(token -> token.subject("maindocs-user-1"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.foet").value(true));
+
+		mockMvc.perform(get("/api/customer/certificates/main-documents")
+				.with(jwt().jwt(token -> token.subject("maindocs-user-1"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.foet").value(true))
+			.andExpect(jsonPath("$.highVoltage").value(false));
+	}
+
+	@Test
+	void customerMainDocumentsDoesNotLeakAcrossUsers() throws Exception {
+		mockMvc.perform(put("/api/customer/certificates/main-documents")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"tbosiet\":true}")
+				.with(jwt().jwt(token -> token.subject("maindocs-user-2"))))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/customer/certificates/main-documents")
+				.with(jwt().jwt(token -> token.subject("maindocs-user-3"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.tbosiet").doesNotExist());
+	}
+
+	@Test
+	void customerCertificateEntriesRequireJwt() throws Exception {
+		mockMvc.perform(get("/api/customer/certificates/entries")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void customerCertificateEntrySavesAndListsByCategory() throws Exception {
+		mockMvc.perform(put("/api/customer/certificates/general/stcw-basic-safety-training")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"issuedDate\":\"2024-01-10\",\"issuePlace\":\"Mumbai\","
+					+ "\"issuingAuthority\":\"DG Shipping\",\"number\":\"ABC-1\"}")
+				.with(jwt().jwt(token -> token.subject("cert-user-1"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.issuePlace").value("Mumbai"));
+
+		mockMvc.perform(get("/api/customer/certificates/entries")
+				.with(jwt().jwt(token -> token.subject("cert-user-1"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.general['stcw-basic-safety-training'].issuingAuthority").value("DG Shipping"));
+	}
+
+	@Test
+	void customerCertificateEntryRejectsMissingRequiredFields() throws Exception {
+		mockMvc.perform(put("/api/customer/certificates/general/stcw-basic-safety-training")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"issuedDate\":\"2024-01-10\",\"issuePlace\":\"Mumbai\"}")
+				.with(jwt().jwt(token -> token.subject("cert-user-2"))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.message").value("Issuing Authority is required."));
+	}
+
+	@Test
+	void customerCertificateEntryRejectsPastExpiryDate() throws Exception {
+		mockMvc.perform(put("/api/customer/certificates/general/stcw-basic-safety-training")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"issuedDate\":\"2010-01-10\",\"issuePlace\":\"Mumbai\","
+					+ "\"issuingAuthority\":\"DG Shipping\",\"expiryDate\":\"2000-01-01\"}")
+				.with(jwt().jwt(token -> token.subject("cert-user-3"))))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void customerCertificateEntryRejectsUnknownCategory() throws Exception {
+		mockMvc.perform(put("/api/customer/certificates/not-a-category/some-type")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{}")
+				.with(jwt().jwt(token -> token.subject("cert-user-4"))))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
 	void adminEndpointRequiresStaticPassword() throws Exception {
 		mockMvc.perform(get("/api/admin/hello")).andExpect(status().isUnauthorized());
 	}

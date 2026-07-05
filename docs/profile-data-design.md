@@ -123,7 +123,35 @@ role already has item access to this table.
    the existing bearer-token `apiRequest`. Prefills from the loaded section, falling back to ID-token
    claims (`given_name`/`family_name`/`birthdate`). Loading + load-error + saved states handled;
    required-field validation still blocks the API call. Verified in-browser against a stubbed API.
-5. Repeat step 4's pattern for the remaining Step-1 sections, then certificates + sea service.
+5. ✅ **Frontend Contact details (done, 2026-07-05 — needs frontend deploy):** `GET
+   /api/customer/profile` (load) + `PUT /api/customer/profile/contact` (save) via the bearer-token
+   `apiRequest`. Fields: Email Address*, Mobile Phone Number 1–4, Home Telephone Number. Prefills
+   email from the `email` claim and Mobile Phone 1 from `phone_number`. Backend now enforces CONTACT
+   required fields (email, mobilePhone1). Verified in-browser against a stubbed API (single GET on
+   load, PUT on save, required-field validation blocks empty submit).
+6. ✅ **Frontend Passport and Seaman book (done, 2026-07-05):** `PUT /api/customer/profile/passport`.
+   Fields all optional (passport number + issue/expiry dates, seaman book number + issue/expiry
+   dates, individual tax number). No claim prefill. Verified in-browser (single GET on load prefills
+   the saved section, PUT on save).
+7. ✅ **Frontend Address and Airport (done, 2026-07-05):** `PUT /api/customer/profile/address`. Two
+   grouped sections (address fields + airport fields, travel times as number inputs), all optional.
+   Introduced a `.portal-form-section` brass heading style for grouped forms. Verified in-browser.
+8. ✅ **Frontend Languages (done, 2026-07-05):** `PUT /api/customer/profile/languages`. Fixed
+   language list, each a proficiency dropdown; stored as `{ languageSlug: level }`. Verified
+   in-browser.
+9. ✅ **Frontend Professional skills (done, 2026-07-05):** `PUT /api/customer/profile/skills`.
+   Yes/no checkbox list stored as `{ skillSlug: boolean }`. Verified in-browser.
+10. ✅ **Frontend Visas (done, 2026-07-05):** `PUT /api/customer/profile/visas`. Per-visa held flag +
+    expiry date stored flat (`{slug}Held`/`{slug}Expiry`) plus `otherVisas` free text. Verified
+    in-browser.
+11. ✅ **Frontend Relatives and next of kin (done, 2026-07-05):** `PUT
+    /api/customer/profile/relatives`. Two grouped sections (relatives + next of kin), Marital Status
+    as a dropdown, rest text/number/date/tel, all optional. Verified in-browser.
+12. ✅ **Frontend Notes and miscellaneous (done, 2026-07-05):** `PUT /api/customer/profile/misc`
+    (route `#/profile/notes`). Text/number fields, four dropdowns (religion/hair/eye/blood), and a
+    Notes textarea, all optional. Added `portalTextareaControl`. Verified in-browser. **All Step-1
+    profile sections are now built.**
+13. Next: certificates + sea service (Steps 2–3).
 
 ### Endpoint contract (as built)
 - `GET /api/customer/profile` → `{ "<section-slug>": { …fields }, … }` (only saved sections).

@@ -1821,6 +1821,50 @@ p {
   font-size: 0.88rem;
 }
 
+/* Profile / section guide pages (informational, no inputs) */
+.portal-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 72ch;
+}
+
+.portal-guide-lead {
+  margin: 0;
+  color: var(--paper);
+  font-size: 0.98rem;
+  line-height: 1.65;
+}
+
+.portal-guide-list {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--paper-dim);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.portal-guide-list li::marker {
+  color: var(--brass);
+}
+
+.portal-guide-list strong {
+  color: var(--paper);
+}
+
+.portal-guide-help {
+  margin: 22px 0 0;
+  padding: 14px 16px;
+  color: var(--paper-dim);
+  font-size: 0.9rem;
+  background: rgba(11, 36, 54, 0.4);
+  border-left: 3px solid var(--brass);
+  border-radius: 0 6px 6px 0;
+}
+
 /* Account dropdown menu (header) */
 .account-menu {
   position: relative;
@@ -1975,7 +2019,9 @@ p {
 .portal-field-control input[type="number"],
 .portal-field-control input[type="date"],
 .portal-field-control input[type="email"],
-.portal-field-control select {
+.portal-field-control input[type="tel"],
+.portal-field-control select,
+.portal-field-control textarea {
   width: 100%;
   max-width: 420px;
   min-height: 42px;
@@ -1986,8 +2032,16 @@ p {
   border-radius: 6px;
 }
 
+.portal-field-control textarea {
+  min-height: 96px;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.5;
+}
+
 .portal-field-control input:focus,
-.portal-field-control select:focus {
+.portal-field-control select:focus,
+.portal-field-control textarea:focus {
   outline: none;
   border-color: var(--brass);
   box-shadow: 0 0 0 3px rgba(200, 149, 46, 0.22);
@@ -2002,6 +2056,155 @@ p {
 .portal-field-control select option {
   color: var(--paper);
   background: var(--navy);
+}
+
+.portal-form-section {
+  margin: 22px 0 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--brass);
+  color: var(--brass);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.portal-form-section:first-child {
+  margin-top: 0;
+}
+
+.portal-visa-control {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.portal-visa-control input[type="date"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.portal-inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--paper-dim);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.portal-field-hint {
+  margin: 4px 0 0;
+  color: var(--paper-dim);
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+
+.portal-check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px 20px;
+  margin-top: 10px;
+}
+
+.portal-check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  color: var(--paper);
+  font-size: 0.9rem;
+  background: rgba(6, 22, 32, 0.4);
+  border: 1px solid var(--line-dark);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.portal-check-item:hover {
+  border-color: var(--brass);
+}
+
+.portal-check-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  accent-color: var(--brass);
+}
+
+/* Certificate accordion (detailed categories) */
+.certificate-toolbar {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin: 4px 0 12px;
+}
+
+.button-small {
+  padding: 6px 12px;
+  font-size: 0.78rem;
+}
+
+.certificate-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.certificate-entry {
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: rgba(6, 22, 32, 0.4);
+  overflow: hidden;
+}
+
+.certificate-entry.is-open {
+  border-color: var(--brass);
+}
+
+.certificate-entry-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  color: var(--paper);
+  font-family: "Oswald", sans-serif;
+  font-size: 0.95rem;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.certificate-entry-title {
+  flex: 1;
+}
+
+.certificate-badge {
+  padding: 2px 9px;
+  color: var(--ink-deep, #06121a);
+  font-family: "Inter", sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--brass);
+  border-radius: 999px;
+}
+
+.certificate-entry-caret {
+  color: var(--brass);
+  transition: transform 0.15s ease;
+}
+
+.certificate-entry.is-open .certificate-entry-caret {
+  transform: rotate(180deg);
+}
+
+.certificate-entry-body {
+  padding: 4px 16px 18px;
+  border-top: 1px solid var(--line-dark);
 }
 
 .portal-form-actions {
@@ -2025,7 +2228,9 @@ p {
   .portal-field-control input[type="number"],
   .portal-field-control input[type="date"],
   .portal-field-control input[type="email"],
-  .portal-field-control select {
+  .portal-field-control input[type="tel"],
+  .portal-field-control select,
+  .portal-field-control textarea {
     max-width: none;
   }
 }

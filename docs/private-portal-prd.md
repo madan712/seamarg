@@ -365,6 +365,10 @@ A pragmatic page-by-page sequence once the PRD is approved:
    area (Dashboard/AI/Career) and the certificate POC were removed. All sub-pages currently render
    a "coming soon" placeholder. Build + typecheck pass.
 2. Step 1 sub-pages (Main information → … → Notes and miscellaneous).
+   - ✅ **Guide to filling your profile (done, 2026-07-05)**: informational-only landing page per
+     §4.1 — first-name greeting, "How to fill it in" best-practice bullets (passport-exact names,
+     complete every section, Save per section, keep validity dates current, edit anytime), and the
+     standard "contact your assigned crewing officer" help note. New `.portal-guide` styles.
    - ✅ **Main information (done, 2026-07-04; API-wired 2026-07-05)**: full form per §4.2 with dummy
      dropdowns (sex, position/alternate positions, citizenship, highest education), required-field
      validation (First name, Last name, Date of Birth), and save-per-section. Now persists to
@@ -372,7 +376,53 @@ A pragmatic page-by-page sequence once the PRD is approved:
      the saved section or Cognito ID-token claims (`given_name`/`family_name`/`birthdate`). Signup
      now captures first/last name, mobile phone, and birth date into Cognito. **"Highest education"
      is a dropdown**. See `docs/profile-data-design.md`.
-3. Step 2 Main documents, then the detailed certificate accordions (with file upload).
+   - ✅ **Contact details (done, 2026-07-05)**: form per §4.3 (Email Address*, Mobile Phone Number
+     1*–4, Home Telephone Number), persists to DynamoDB via `PUT /api/customer/profile/contact`,
+     prefilling email + Mobile Phone 1 from Cognito claims. Backend enforces the two required fields.
+   - ✅ **Passport and Seaman book (done, 2026-07-05)**: form per §4.4 (International Passport Number,
+     Passport Issue/Expiry dates, Seaman Book Number, Seaman Book Issue/Expiry dates, Individual Tax
+     Number — all optional), persists via `PUT /api/customer/profile/passport`.
+   - ✅ **Address and Airport (done, 2026-07-05)**: form per §4.5, split into two brass-headed groups
+     (Address: Country, Province, City, Post Code, Street, House Number, Apartment Number; Airport:
+     Main/Alternative Airport Name + travel-time-in-hours number fields — all optional). Persists via
+     `PUT /api/customer/profile/address`.
+   - ✅ **Languages (done, 2026-07-05)**: fixed reference list (English, German, Spanish, Dutch), each
+     with a "Select Level" proficiency dropdown (Basic/Conversational/Fluent/Native — dummy). Stored
+     as `{ languageSlug: level }` via `PUT /api/customer/profile/languages`. `portalSelectControl`
+     gained an optional placeholder param.
+   - ✅ **Professional skills (done, 2026-07-05)**: yes/no checkbox list (AH, ROV, RIG-move, Azimuth
+     ASD, Towing, Boat handling), stored as `{ skillSlug: boolean }` via
+     `PUT /api/customer/profile/skills`.
+   - ✅ **Visas (done, 2026-07-05)**: per-visa "Held" checkbox + expiry-date pair (Brazil, Schengen,
+     USA, Canadian, KSA, UAE, UK) plus an "Other visas" free-text field, stored flat
+     (`{slug}Held`/`{slug}Expiry` + `otherVisas`) via `PUT /api/customer/profile/visas`. Added a
+     `.portal-visa-control` two-control row + `.portal-field-hint`.
+   - ✅ **Relatives and next of kin (done, 2026-07-05)**: form per §4.9 in two brass-headed groups
+     (Relatives: Marital Status dropdown, marriage date, children/sons/daughters counts, parents'
+     full names; Next of Kin: first/middle/surname, address, relation degree, contact phone,
+     emergency contact name — all optional). Persists via `PUT /api/customer/profile/relatives`.
+   - ✅ **Notes and miscellaneous (done, 2026-07-05)**: form per §4.10 (Working Coverall Size, Body
+     Weight/Height, Working Shoe Size, Religion/Hair color/Eye color/Blood type dropdowns, Notes
+     textarea — all optional). Persists via `PUT /api/customer/profile/misc` (route `#/profile/notes`,
+     section slug `misc`). Added `portalTextareaControl` + textarea theming. **Step 1 complete.**
+3. Step 2 Certificates. See `docs/certificates-design.md` for the full mini-spec.
+   - ✅ **Guide to entering certificates (done, 2026-07-05)**: informational page per §5.1 — valid
+     certs = stronger profile, the two entry patterns, the category list, and the rules (expired
+     rejected, Expand filled / Collapse all). Reuses `.portal-guide`.
+   - ✅ **Main documents (done, 2026-07-05)**: held/not-held checkbox grid per §5.2 (17 dummy items),
+     persists via `PUT /api/customer/certificates/main-documents` (stored as `CERT#MAINDOCS` JSON).
+     Introduced the certificates load/state plumbing (`certificatesState`, loop-safe
+     `loadCertificatesFromApi`, `retry-certificates`) + `.portal-check-grid` styles. Backend: new
+     generic `CertificateDataRepository` (Dynamo + in-memory) + `MainDocuments` service/controller.
+   - ✅ **General certificates (done, 2026-07-05)**: accordion of catalog types (dummy 6-item list),
+     each expanding to an entry form (Number, Issued Date*, Expiry Date, Issue Place*, Issuing
+     Authority*) with a Saved badge, per-entry Save, Expand-filled / Collapse-all controls. Required +
+     past-expiry validation (client and server). Persists via `PUT
+     /api/customer/certificates/{category}/{type}`; loads via `GET .../entries`. Backend: generic
+     prefix query on `CertificateDataRepository`, `CertificateCategory` enum, `CertificateEntry`
+     service/controller. `.certificate-accordion` styles.
+   - ⏳ Next: file upload + MiniMax extraction on General, then replicate to the other five categories
+     (COC grade for NCOC, Clinic Name for Medical).
 4. Step 3 Sea service records (add/edit/list).
 
 Each page will get its own mini technical spec (fields → data model → API) at build time.

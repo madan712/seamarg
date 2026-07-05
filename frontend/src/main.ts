@@ -211,6 +211,80 @@ type MainInformation = {
   educationalLevel: string;
 };
 
+type ContactDetails = {
+  email: string;
+  mobilePhone1: string;
+  mobilePhone2: string;
+  mobilePhone3: string;
+  mobilePhone4: string;
+  homeTelephone: string;
+};
+
+type PassportDetails = {
+  passportNumber: string;
+  passportIssueDate: string;
+  passportExpiryDate: string;
+  seamanBookNumber: string;
+  seamanBookIssueDate: string;
+  seamanBookExpiryDate: string;
+  individualTaxNumber: string;
+};
+
+type AddressDetails = {
+  country: string;
+  province: string;
+  city: string;
+  postCode: string;
+  street: string;
+  houseNumber: string;
+  apartmentNumber: string;
+  mainAirportName: string;
+  mainAirportTravelTime: string;
+  altAirportName: string;
+  altAirportTravelTime: string;
+};
+
+// Language proficiency keyed by language slug (e.g. { english: "Fluent" }).
+type LanguageLevels = Record<string, string>;
+
+// Professional skills keyed by skill slug (e.g. { rov: true }).
+type ProfessionalSkills = Record<string, boolean>;
+
+// Visas keyed by visa slug, each with a "held" flag and expiry date, plus a free-text field.
+type VisaDetails = {
+  entries: Record<string, { held: boolean; expiry: string }>;
+  otherVisas: string;
+};
+
+type MiscDetails = {
+  coverallSize: string;
+  bodyWeight: string;
+  bodyHeight: string;
+  shoeSize: string;
+  religion: string;
+  hairColor: string;
+  eyeColor: string;
+  bloodType: string;
+  notes: string;
+};
+
+type RelativesDetails = {
+  maritalStatus: string;
+  dateOfMarriage: string;
+  numberOfChildren: string;
+  numberOfSons: string;
+  numberOfDaughters: string;
+  fatherFullName: string;
+  motherFullName: string;
+  nokFirstName: string;
+  nokMiddleName: string;
+  nokSurname: string;
+  nokAddress: string;
+  nokRelationDegree: string;
+  nokContactPhone: string;
+  emergencyContactName: string;
+};
+
 // Profile sections loaded from the backend, keyed by section slug (e.g. "main").
 type ProfileSections = Record<string, Record<string, unknown>>;
 
@@ -230,6 +304,42 @@ let profileState: ProfileState = {
 
 function resetProfileState(): void {
   profileState = { loadedForSubject: null, loading: false, sections: {}, error: '' };
+}
+
+// Certificates area state (Step 2). Loaded once per Cognito subject, loop-safe
+// like profileState. For now it holds the Main documents held/not-held map;
+// detailed certificate entries are added in a later step.
+// Detailed certificate entries: category slug → catalog type slug → field values.
+type CertificateEntries = Record<string, Record<string, Record<string, unknown>>>;
+
+type CertificatesState = {
+  loadedForSubject: string | null;
+  loading: boolean;
+  mainDocuments: Record<string, boolean>;
+  entries: CertificateEntries;
+  error: string;
+};
+
+let certificatesState: CertificatesState = {
+  loadedForSubject: null,
+  loading: false,
+  mainDocuments: {},
+  entries: {},
+  error: '',
+};
+
+// Which accordion entries are expanded, keyed by `${category}:${typeSlug}`.
+const expandedCertificates = new Set<string>();
+
+function resetCertificatesState(): void {
+  certificatesState = {
+    loadedForSubject: null,
+    loading: false,
+    mainDocuments: {},
+    entries: {},
+    error: '',
+  };
+  expandedCertificates.clear();
 }
 
 // Dummy option lists — replaced with real reference data later (PRD §9).
@@ -285,6 +395,95 @@ const EDUCATION_OPTIONS = [
   'Other',
 ];
 
+// Fixed reference list of languages (final list TBD) with a proficiency dropdown each.
+const LANGUAGES: { slug: string; label: string }[] = [
+  { slug: 'english', label: 'English' },
+  { slug: 'german', label: 'German' },
+  { slug: 'spanish', label: 'Spanish' },
+  { slug: 'dutch', label: 'Dutch' },
+];
+
+const LANGUAGE_LEVEL_OPTIONS = ['Basic', 'Conversational', 'Fluent', 'Native'];
+
+// Yes/no professional-skill checkboxes.
+const PROFESSIONAL_SKILLS: { slug: string; label: string }[] = [
+  { slug: 'ah', label: 'AH experience' },
+  { slug: 'rov', label: 'ROV experience' },
+  { slug: 'rigMove', label: 'RIG-move experience' },
+  { slug: 'azimuthAsd', label: 'Azimuth ASD experience' },
+  { slug: 'towing', label: 'Towing experience' },
+  { slug: 'boatHandling', label: 'Boat handling experience' },
+];
+
+const MARITAL_STATUS_OPTIONS = ['Single', 'Married', 'Divorced', 'Widowed', 'Separated'];
+
+// Notes & miscellaneous dropdowns (dummy option lists).
+const RELIGION_OPTIONS = [
+  'Christianity',
+  'Islam',
+  'Hinduism',
+  'Buddhism',
+  'Judaism',
+  'Sikhism',
+  'Other',
+  'Prefer not to say',
+];
+const HAIR_COLOR_OPTIONS = ['Black', 'Brown', 'Blonde', 'Red', 'Grey', 'White', 'Other'];
+const EYE_COLOR_OPTIONS = ['Brown', 'Blue', 'Green', 'Hazel', 'Grey', 'Black', 'Other'];
+const BLOOD_TYPE_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+// Step 2 — "Main documents" checkbox grid (dummy catalog; real list loads later).
+const MAIN_DOCUMENTS: { slug: string; label: string }[] = [
+  { slug: 'covidVaccinated', label: 'COVID-19 fully vaccinated' },
+  { slug: 'aramco', label: 'ARAMCO approval' },
+  { slug: 'bosietNogepa', label: 'BOSIET (NOGEPA)' },
+  { slug: 'bosietOpito', label: 'BOSIET (OPITO)' },
+  { slug: 'dpAdvanced', label: 'DP Advanced Course' },
+  { slug: 'dpInduction', label: 'DP Induction Course' },
+  { slug: 'dpLimited', label: 'DP Limited Course' },
+  { slug: 'dpMaintenance', label: 'DP Maintenance Course' },
+  { slug: 'dpUnlimited', label: 'DP Unlimited Course' },
+  { slug: 'foet', label: 'FOET' },
+  { slug: 'highVoltage', label: 'High voltage' },
+  { slug: 'huetNogepa', label: 'HUET (NOGEPA)' },
+  { slug: 'huetOpito', label: 'HUET (OPITO)' },
+  { slug: 'sparrow1', label: 'Sparrow Stage 1 Certificate' },
+  { slug: 'sparrow2', label: 'Sparrow Stage 2 Certificate' },
+  { slug: 'sparrow3', label: 'Sparrow Stage 3 Certificate' },
+  { slug: 'tbosiet', label: 'TBOSIET' },
+];
+
+// Step 2 — detailed certificate catalogs (dummy; real reference data loads later).
+type CertificateType = { slug: string; label: string };
+
+const GENERAL_CERTIFICATES: CertificateType[] = [
+  { slug: 'stcw-basic-safety-training', label: 'STCW Basic Safety Training' },
+  { slug: 'proficiency-survival-craft', label: 'Proficiency in Survival Craft & Rescue Boats' },
+  { slug: 'advanced-fire-fighting', label: 'Advanced Fire Fighting' },
+  { slug: 'medical-first-aid', label: 'Medical First Aid' },
+  { slug: 'gmdss-general-operator', label: 'GMDSS General Operator' },
+  { slug: 'ship-security-awareness', label: 'Ship Security Awareness' },
+];
+
+// Catalog lookup by category slug (only General is built so far).
+function certificateCatalog(categorySlug: string): CertificateType[] {
+  if (categorySlug === 'general') {
+    return GENERAL_CERTIFICATES;
+  }
+  return [];
+}
+
+// Visas — each has a "held" checkbox plus an expiry date.
+const VISAS: { slug: string; label: string }[] = [
+  { slug: 'brazil', label: 'Brazil visa' },
+  { slug: 'schengen', label: 'Schengen visa' },
+  { slug: 'usa', label: 'USA visa' },
+  { slug: 'canadian', label: 'Canadian visa' },
+  { slug: 'ksa', label: 'KSA visa' },
+  { slug: 'uae', label: 'UAE visa' },
+  { slug: 'uk', label: 'UK visa' },
+];
+
 // Load all profile sections for the signed-in user from the backend once per
 // session (per Cognito subject). Errors are surfaced but do not block editing.
 //
@@ -316,6 +515,45 @@ async function loadProfileFromApi(session: AuthSession, force = false): Promise<
       loadedForSubject: subject,
       loading: false,
       sections: {},
+      error: normalizeError(error).message,
+    };
+  }
+
+  renderApp();
+}
+
+async function loadCertificatesFromApi(session: AuthSession, force = false): Promise<void> {
+  const subject = claimToString(session.claims.sub) ?? 'anonymous';
+
+  if (!force && certificatesState.loadedForSubject === subject) {
+    return;
+  }
+
+  certificatesState = { ...certificatesState, loading: true, loadedForSubject: subject, error: '' };
+  renderApp();
+
+  try {
+    const [docs, entries] = await Promise.all([
+      apiRequest<Record<string, unknown>>('/api/customer/certificates/main-documents', session),
+      apiRequest<CertificateEntries>('/api/customer/certificates/entries', session),
+    ]);
+    const mainDocuments: Record<string, boolean> = {};
+    for (const key of Object.keys(docs ?? {})) {
+      mainDocuments[key] = docs[key] === true;
+    }
+    certificatesState = {
+      loadedForSubject: subject,
+      loading: false,
+      mainDocuments,
+      entries: entries ?? {},
+      error: '',
+    };
+  } catch (error) {
+    certificatesState = {
+      loadedForSubject: subject,
+      loading: false,
+      mainDocuments: {},
+      entries: {},
       error: normalizeError(error).message,
     };
   }
@@ -365,6 +603,119 @@ function getMainInformation(session: AuthSession | null): MainInformation {
     yearGraduated: savedString(saved, 'yearGraduated'),
     graduatedFrom: savedString(saved, 'graduatedFrom'),
     educationalLevel: savedString(saved, 'educationalLevel'),
+  };
+}
+
+function getContactDetails(session: AuthSession | null): ContactDetails {
+  const saved = savedSection('contact');
+  const claim = (key: string) => claimToString(session?.claims[key]);
+
+  return {
+    email: savedString(saved, 'email', claim('email') ?? ''),
+    mobilePhone1: savedString(saved, 'mobilePhone1', claim('phone_number') ?? ''),
+    mobilePhone2: savedString(saved, 'mobilePhone2'),
+    mobilePhone3: savedString(saved, 'mobilePhone3'),
+    mobilePhone4: savedString(saved, 'mobilePhone4'),
+    homeTelephone: savedString(saved, 'homeTelephone'),
+  };
+}
+
+function getPassportDetails(): PassportDetails {
+  const saved = savedSection('passport');
+
+  return {
+    passportNumber: savedString(saved, 'passportNumber'),
+    passportIssueDate: savedString(saved, 'passportIssueDate'),
+    passportExpiryDate: savedString(saved, 'passportExpiryDate'),
+    seamanBookNumber: savedString(saved, 'seamanBookNumber'),
+    seamanBookIssueDate: savedString(saved, 'seamanBookIssueDate'),
+    seamanBookExpiryDate: savedString(saved, 'seamanBookExpiryDate'),
+    individualTaxNumber: savedString(saved, 'individualTaxNumber'),
+  };
+}
+
+function getAddressDetails(): AddressDetails {
+  const saved = savedSection('address');
+
+  return {
+    country: savedString(saved, 'country'),
+    province: savedString(saved, 'province'),
+    city: savedString(saved, 'city'),
+    postCode: savedString(saved, 'postCode'),
+    street: savedString(saved, 'street'),
+    houseNumber: savedString(saved, 'houseNumber'),
+    apartmentNumber: savedString(saved, 'apartmentNumber'),
+    mainAirportName: savedString(saved, 'mainAirportName'),
+    mainAirportTravelTime: savedString(saved, 'mainAirportTravelTime'),
+    altAirportName: savedString(saved, 'altAirportName'),
+    altAirportTravelTime: savedString(saved, 'altAirportTravelTime'),
+  };
+}
+
+function getLanguageLevels(): LanguageLevels {
+  const saved = savedSection('languages');
+  const levels: LanguageLevels = {};
+  for (const language of LANGUAGES) {
+    levels[language.slug] = savedString(saved, language.slug);
+  }
+  return levels;
+}
+
+function getProfessionalSkills(): ProfessionalSkills {
+  const saved = savedSection('skills');
+  const skills: ProfessionalSkills = {};
+  for (const skill of PROFESSIONAL_SKILLS) {
+    skills[skill.slug] = saved[skill.slug] === true;
+  }
+  return skills;
+}
+
+function getVisaDetails(): VisaDetails {
+  const saved = savedSection('visas');
+  const entries: VisaDetails['entries'] = {};
+  for (const visa of VISAS) {
+    entries[visa.slug] = {
+      held: saved[`${visa.slug}Held`] === true,
+      expiry: savedString(saved, `${visa.slug}Expiry`),
+    };
+  }
+  return { entries, otherVisas: savedString(saved, 'otherVisas') };
+}
+
+function getMiscDetails(): MiscDetails {
+  const saved = savedSection('misc');
+
+  return {
+    coverallSize: savedString(saved, 'coverallSize'),
+    bodyWeight: savedString(saved, 'bodyWeight'),
+    bodyHeight: savedString(saved, 'bodyHeight'),
+    shoeSize: savedString(saved, 'shoeSize'),
+    religion: savedString(saved, 'religion'),
+    hairColor: savedString(saved, 'hairColor'),
+    eyeColor: savedString(saved, 'eyeColor'),
+    bloodType: savedString(saved, 'bloodType'),
+    notes: savedString(saved, 'notes'),
+  };
+}
+
+function getRelativesDetails(): RelativesDetails {
+  const saved = savedSection('relatives');
+
+  return {
+    maritalStatus: savedString(saved, 'maritalStatus'),
+    dateOfMarriage: savedString(saved, 'dateOfMarriage'),
+    numberOfChildren: savedString(saved, 'numberOfChildren'),
+    numberOfSons: savedString(saved, 'numberOfSons'),
+    numberOfDaughters: savedString(saved, 'numberOfDaughters'),
+    fatherFullName: savedString(saved, 'fatherFullName'),
+    motherFullName: savedString(saved, 'motherFullName'),
+    nokFirstName: savedString(saved, 'nokFirstName'),
+    nokMiddleName: savedString(saved, 'nokMiddleName'),
+    nokSurname: savedString(saved, 'nokSurname'),
+    nokAddress: savedString(saved, 'nokAddress'),
+    nokRelationDegree: savedString(saved, 'nokRelationDegree'),
+    nokContactPhone: savedString(saved, 'nokContactPhone'),
+    emergencyContactName: savedString(saved, 'emergencyContactName'),
   };
 }
 
@@ -678,6 +1029,7 @@ function signOut(): void {
 
   clearSession();
   resetProfileState();
+  resetCertificatesState();
   setPath('/');
   renderApp();
 }
@@ -1335,8 +1687,56 @@ function renderPrivateSubPageBody(
   step: PrivateStep,
   sub: PrivateSubPage,
 ): string {
+  if (step.path === '/profile' && sub.slug === 'guide') {
+    return renderProfileGuide(session);
+  }
+
   if (step.path === '/profile' && sub.slug === 'main-information') {
     return renderMainInformationForm(session);
+  }
+
+  if (step.path === '/profile' && sub.slug === 'contact-details') {
+    return renderContactDetailsForm(session);
+  }
+
+  if (step.path === '/profile' && sub.slug === 'passport') {
+    return renderPassportForm(session);
+  }
+
+  if (step.path === '/profile' && sub.slug === 'address') {
+    return renderAddressForm(session);
+  }
+
+  if (step.path === '/profile' && sub.slug === 'languages') {
+    return renderLanguagesForm(session);
+  }
+
+  if (step.path === '/profile' && sub.slug === 'professional-skills') {
+    return renderProfessionalSkillsForm(session);
+  }
+
+  if (step.path === '/profile' && sub.slug === 'visas') {
+    return renderVisasForm(session);
+  }
+
+  if (step.path === '/profile' && sub.slug === 'relatives') {
+    return renderRelativesForm(session);
+  }
+
+  if (step.path === '/profile' && sub.slug === 'notes') {
+    return renderMiscForm(session);
+  }
+
+  if (step.path === '/certificates' && sub.slug === 'guide') {
+    return renderCertificatesGuide(session);
+  }
+
+  if (step.path === '/certificates' && sub.slug === 'main-documents') {
+    return renderMainDocumentsForm(session);
+  }
+
+  if (step.path === '/certificates' && sub.slug === 'general') {
+    return renderCertificateCategory(session, 'general');
   }
 
   return `
@@ -1392,8 +1792,9 @@ function portalSelectControl(
   value: string,
   options: string[],
   required = false,
+  placeholder = 'Select',
 ): string {
-  const opts = [`<option value="">Select</option>`]
+  const opts = [`<option value="">${escapeHtml(placeholder)}</option>`]
     .concat(
       options.map(
         (option) =>
@@ -1404,8 +1805,217 @@ function portalSelectControl(
   return `<select id="${id}" name="${escapeHtml(name)}"${required ? ' required' : ''}>${opts}</select>`;
 }
 
+function portalTextareaControl(id: string, name: string, value: string, rows = 4): string {
+  return `<textarea id="${id}" name="${escapeHtml(name)}" rows="${rows}">${escapeHtml(value)}</textarea>`;
+}
+
 function portalCheckboxControl(id: string, name: string, checked: boolean): string {
   return `<input id="${id}" name="${escapeHtml(name)}" type="checkbox"${checked ? ' checked' : ''} />`;
+}
+
+function renderProfileGuide(session: AuthSession | null): string {
+  const name = firstName(session);
+  const greeting = name ? `Welcome, ${escapeHtml(name)}.` : 'Welcome.';
+
+  return `
+    <article class="portal-guide">
+      <p class="portal-guide-lead">
+        ${greeting} This section holds the personal data our crewing team uses to review your
+        candidacy, complete joining formalities, book your flights, and prepare your contract.
+        Accurate, complete, and up-to-date information gives you the best chance of being selected.
+      </p>
+
+      <h2 class="portal-form-section">How to fill it in</h2>
+      <ul class="portal-guide-list">
+        <li>Enter your names <strong>exactly as they appear in your passport</strong>, using Latin
+          characters.</li>
+        <li>Work through <strong>every sub-page</strong> in this section — the more complete your
+          profile, the faster we can act on an opportunity.</li>
+        <li>Each sub-page saves on its own: <strong>click Save before moving on</strong>. Fields
+          marked with a red asterisk (<span class="req">*</span>) are required.</li>
+        <li>Keep <strong>validity and expiry dates current</strong> (passport, seaman book, visas) so
+          you stay eligible for assignments.</li>
+        <li>You can return and <strong>edit any section at any time</strong>; there is nothing to
+          submit — your profile is always live.</li>
+      </ul>
+
+      <p class="portal-guide-help">
+        If you need assistance, please contact your assigned crewing officer.
+      </p>
+    </article>
+  `;
+}
+
+function renderCertificatesGuide(session: AuthSession | null): string {
+  const name = firstName(session);
+  const greeting = name ? `Welcome, ${escapeHtml(name)}.` : 'Welcome.';
+
+  return `
+    <article class="portal-guide">
+      <p class="portal-guide-lead">
+        ${greeting} This section records your maritime certificates and documents. The more
+        <strong>valid</strong> certificates you list, the stronger your profile — expired documents
+        are not accepted.
+      </p>
+
+      <h2 class="portal-form-section">Two ways to enter certificates</h2>
+      <ul class="portal-guide-list">
+        <li><strong>Main documents</strong> — a quick checklist: tick every course or approval you
+          currently hold.</li>
+        <li><strong>Detailed categories</strong> — expand a certificate in a category and fill in its
+          details (number, issue/expiry dates, place, issuing authority). You can attach a scan and we
+          will read the details from it to save you typing.</li>
+      </ul>
+
+      <h2 class="portal-form-section">Categories</h2>
+      <ul class="portal-guide-list">
+        <li>Main documents</li>
+        <li>General certificates</li>
+        <li>National Certificates Of Competency</li>
+        <li>Medical Certificates</li>
+        <li>Tanker/Passenger certificates</li>
+        <li>Offshore certificates</li>
+        <li>Flag State Documents</li>
+      </ul>
+
+      <h2 class="portal-form-section">Good to know</h2>
+      <ul class="portal-guide-list">
+        <li><strong>Expired certificates are rejected</strong> — keep expiry dates current.</li>
+        <li>Each certificate saves on its own; save before moving to the next.</li>
+        <li>Use <strong>Expand filled</strong> and <strong>Collapse all</strong> to manage long lists.</li>
+      </ul>
+
+      <p class="portal-guide-help">
+        If you need assistance, please contact your assigned crewing officer.
+      </p>
+    </article>
+  `;
+}
+
+function renderMainDocumentsForm(session: AuthSession | null): string {
+  const subject = claimToString(session?.claims.sub);
+
+  if (certificatesState.loading && certificatesState.loadedForSubject !== subject) {
+    return `
+      <div class="portal-placeholder" aria-live="polite">
+        <p class="portal-placeholder-title">Loading your certificates…</p>
+      </div>
+    `;
+  }
+
+  const loadError = certificatesState.error
+    ? `<div class="alert alert-error portal-alert" role="status">
+         <span>Could not load your saved certificates: ${escapeHtml(certificatesState.error)}</span>
+         <button class="button button-ghost" type="button" data-action="retry-certificates">Retry</button>
+       </div>`
+    : '';
+
+  const items = MAIN_DOCUMENTS.map((doc) => {
+    const checked = certificatesState.mainDocuments[doc.slug] === true;
+    return `
+      <label class="portal-check-item" for="maindoc-${doc.slug}">
+        <input id="maindoc-${doc.slug}" name="${escapeHtml(doc.slug)}" type="checkbox"${checked ? ' checked' : ''} />
+        <span>${escapeHtml(doc.label)}</span>
+      </label>
+    `;
+  }).join('');
+
+  return `
+    ${loadError}
+    <form class="portal-form" id="certificates-main-documents-form" novalidate>
+      <p class="portal-guide-lead">Tick every course, approval, or document you currently hold.</p>
+      <div class="portal-check-grid">${items}</div>
+      <div class="portal-form-actions">
+        <button class="button button-primary" type="submit">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function getCertificateEntry(category: string, typeSlug: string): Record<string, unknown> {
+  return certificatesState.entries[category]?.[typeSlug] ?? {};
+}
+
+function renderCertificateCategory(session: AuthSession | null, category: string): string {
+  const subject = claimToString(session?.claims.sub);
+
+  if (certificatesState.loading && certificatesState.loadedForSubject !== subject) {
+    return `
+      <div class="portal-placeholder" aria-live="polite">
+        <p class="portal-placeholder-title">Loading your certificates…</p>
+      </div>
+    `;
+  }
+
+  const loadError = certificatesState.error
+    ? `<div class="alert alert-error portal-alert" role="status">
+         <span>Could not load your saved certificates: ${escapeHtml(certificatesState.error)}</span>
+         <button class="button button-ghost" type="button" data-action="retry-certificates">Retry</button>
+       </div>`
+    : '';
+
+  const catalog = certificateCatalog(category);
+  const rows = catalog.map((type) => renderCertificateEntry(category, type)).join('');
+
+  return `
+    ${loadError}
+    <p class="portal-guide-lead">
+      Expand a certificate to fill in its details, then Save. Expired certificates are not accepted.
+    </p>
+    <div class="certificate-toolbar">
+      <button class="button button-ghost button-small" type="button"
+        data-action="expand-filled-certificates" data-cert-category="${escapeHtml(category)}">Expand filled</button>
+      <button class="button button-ghost button-small" type="button"
+        data-action="collapse-certificates" data-cert-category="${escapeHtml(category)}">Collapse all</button>
+    </div>
+    <div class="certificate-accordion">${rows}</div>
+  `;
+}
+
+function renderCertificateEntry(category: string, type: CertificateType): string {
+  const key = `${category}:${type.slug}`;
+  const entry = getCertificateEntry(category, type.slug);
+  const filled = Object.keys(entry).length > 0;
+  const expanded = expandedCertificates.has(key);
+  const idBase = `cert-${category}-${type.slug}`;
+
+  const head = `
+    <button
+      type="button"
+      class="certificate-entry-head"
+      data-action="toggle-certificate"
+      data-cert-key="${escapeHtml(key)}"
+      aria-expanded="${expanded ? 'true' : 'false'}"
+    >
+      <span class="certificate-entry-title">${escapeHtml(type.label)}</span>
+      ${filled ? '<span class="certificate-badge">Saved</span>' : ''}
+      <span class="certificate-entry-caret" aria-hidden="true">▾</span>
+    </button>
+  `;
+
+  const body = expanded
+    ? `
+      <div class="certificate-entry-body">
+        <form
+          class="portal-form certificate-entry-form"
+          data-cert-category="${escapeHtml(category)}"
+          data-cert-type="${escapeHtml(type.slug)}"
+          novalidate
+        >
+          ${portalFieldRow(`${idBase}-number`, 'Number', portalTextControl(`${idBase}-number`, 'number', savedString(entry, 'number')))}
+          ${portalFieldRow(`${idBase}-issuedDate`, 'Issued Date', portalTextControl(`${idBase}-issuedDate`, 'issuedDate', savedString(entry, 'issuedDate'), 'date', true), true)}
+          ${portalFieldRow(`${idBase}-expiryDate`, 'Expiry Date', portalTextControl(`${idBase}-expiryDate`, 'expiryDate', savedString(entry, 'expiryDate'), 'date'))}
+          ${portalFieldRow(`${idBase}-issuePlace`, 'Issue Place', portalTextControl(`${idBase}-issuePlace`, 'issuePlace', savedString(entry, 'issuePlace'), 'text', true), true)}
+          ${portalFieldRow(`${idBase}-issuingAuthority`, 'Issuing Authority', portalTextControl(`${idBase}-issuingAuthority`, 'issuingAuthority', savedString(entry, 'issuingAuthority'), 'text', true), true)}
+          <div class="portal-form-actions">
+            <button class="button button-primary" type="submit">Save</button>
+          </div>
+        </form>
+      </div>
+    `
+    : '';
+
+  return `<div class="certificate-entry${expanded ? ' is-open' : ''}${filled ? ' is-filled' : ''}">${head}${body}</div>`;
 }
 
 function renderMainInformationForm(session: AuthSession | null): string {
@@ -1449,6 +2059,344 @@ function renderMainInformationForm(session: AuthSession | null): string {
       ${portalFieldRow('mi-yearGraduated', 'Year you have graduated', portalTextControl('mi-yearGraduated', 'yearGraduated', data.yearGraduated, 'number'))}
       ${portalFieldRow('mi-graduatedFrom', 'Graduated from', portalTextControl('mi-graduatedFrom', 'graduatedFrom', data.graduatedFrom))}
       ${portalFieldRow('mi-educationalLevel', 'Educational level', portalTextControl('mi-educationalLevel', 'educationalLevel', data.educationalLevel))}
+      <div class="portal-form-actions">
+        <button class="button button-primary" type="submit">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderContactDetailsForm(session: AuthSession | null): string {
+  const subject = claimToString(session?.claims.sub);
+
+  if (profileState.loading && profileState.loadedForSubject !== subject) {
+    return `
+      <div class="portal-placeholder" aria-live="polite">
+        <p class="portal-placeholder-title">Loading your profile…</p>
+      </div>
+    `;
+  }
+
+  const data = getContactDetails(session);
+  const loadError = profileState.error
+    ? `<div class="alert alert-error portal-alert" role="status">
+         <span>Could not load your saved profile: ${escapeHtml(profileState.error)}</span>
+         <button class="button button-ghost" type="button" data-action="retry-profile">Retry</button>
+       </div>`
+    : '';
+
+  return `
+    ${loadError}
+    <form class="portal-form" id="profile-contact-details-form" novalidate>
+      ${portalFieldRow('cd-email', 'Email Address', portalTextControl('cd-email', 'email', data.email, 'email', true), true)}
+      ${portalFieldRow('cd-mobilePhone1', 'Mobile Phone Number 1', portalTextControl('cd-mobilePhone1', 'mobilePhone1', data.mobilePhone1, 'tel', true), true)}
+      ${portalFieldRow('cd-mobilePhone2', 'Mobile Phone Number 2', portalTextControl('cd-mobilePhone2', 'mobilePhone2', data.mobilePhone2, 'tel'))}
+      ${portalFieldRow('cd-mobilePhone3', 'Mobile Phone Number 3', portalTextControl('cd-mobilePhone3', 'mobilePhone3', data.mobilePhone3, 'tel'))}
+      ${portalFieldRow('cd-mobilePhone4', 'Mobile Phone Number 4', portalTextControl('cd-mobilePhone4', 'mobilePhone4', data.mobilePhone4, 'tel'))}
+      ${portalFieldRow('cd-homeTelephone', 'Home Telephone Number', portalTextControl('cd-homeTelephone', 'homeTelephone', data.homeTelephone, 'tel'))}
+      <div class="portal-form-actions">
+        <button class="button button-primary" type="submit">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderPassportForm(session: AuthSession | null): string {
+  const subject = claimToString(session?.claims.sub);
+
+  if (profileState.loading && profileState.loadedForSubject !== subject) {
+    return `
+      <div class="portal-placeholder" aria-live="polite">
+        <p class="portal-placeholder-title">Loading your profile…</p>
+      </div>
+    `;
+  }
+
+  const data = getPassportDetails();
+  const loadError = profileState.error
+    ? `<div class="alert alert-error portal-alert" role="status">
+         <span>Could not load your saved profile: ${escapeHtml(profileState.error)}</span>
+         <button class="button button-ghost" type="button" data-action="retry-profile">Retry</button>
+       </div>`
+    : '';
+
+  return `
+    ${loadError}
+    <form class="portal-form" id="profile-passport-form" novalidate>
+      ${portalFieldRow('pp-passportNumber', 'International Passport Number', portalTextControl('pp-passportNumber', 'passportNumber', data.passportNumber))}
+      ${portalFieldRow('pp-passportIssueDate', 'International Passport Issue Date', portalTextControl('pp-passportIssueDate', 'passportIssueDate', data.passportIssueDate, 'date'))}
+      ${portalFieldRow('pp-passportExpiryDate', 'Passport expiry date', portalTextControl('pp-passportExpiryDate', 'passportExpiryDate', data.passportExpiryDate, 'date'))}
+      ${portalFieldRow('pp-seamanBookNumber', 'Seaman Book Number', portalTextControl('pp-seamanBookNumber', 'seamanBookNumber', data.seamanBookNumber))}
+      ${portalFieldRow('pp-seamanBookIssueDate', 'Seaman Book Issue Date', portalTextControl('pp-seamanBookIssueDate', 'seamanBookIssueDate', data.seamanBookIssueDate, 'date'))}
+      ${portalFieldRow('pp-seamanBookExpiryDate', 'Seaman Book Expiry Date', portalTextControl('pp-seamanBookExpiryDate', 'seamanBookExpiryDate', data.seamanBookExpiryDate, 'date'))}
+      ${portalFieldRow('pp-individualTaxNumber', 'Individual Tax Number', portalTextControl('pp-individualTaxNumber', 'individualTaxNumber', data.individualTaxNumber))}
+      <div class="portal-form-actions">
+        <button class="button button-primary" type="submit">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderAddressForm(session: AuthSession | null): string {
+  const subject = claimToString(session?.claims.sub);
+
+  if (profileState.loading && profileState.loadedForSubject !== subject) {
+    return `
+      <div class="portal-placeholder" aria-live="polite">
+        <p class="portal-placeholder-title">Loading your profile…</p>
+      </div>
+    `;
+  }
+
+  const data = getAddressDetails();
+  const loadError = profileState.error
+    ? `<div class="alert alert-error portal-alert" role="status">
+         <span>Could not load your saved profile: ${escapeHtml(profileState.error)}</span>
+         <button class="button button-ghost" type="button" data-action="retry-profile">Retry</button>
+       </div>`
+    : '';
+
+  return `
+    ${loadError}
+    <form class="portal-form" id="profile-address-form" novalidate>
+      <h2 class="portal-form-section">Address</h2>
+      ${portalFieldRow('ad-country', 'Country', portalTextControl('ad-country', 'country', data.country))}
+      ${portalFieldRow('ad-province', 'Province', portalTextControl('ad-province', 'province', data.province))}
+      ${portalFieldRow('ad-city', 'City', portalTextControl('ad-city', 'city', data.city))}
+      ${portalFieldRow('ad-postCode', 'Post Code', portalTextControl('ad-postCode', 'postCode', data.postCode))}
+      ${portalFieldRow('ad-street', 'Street', portalTextControl('ad-street', 'street', data.street))}
+      ${portalFieldRow('ad-houseNumber', 'House Number', portalTextControl('ad-houseNumber', 'houseNumber', data.houseNumber))}
+      ${portalFieldRow('ad-apartmentNumber', 'Apartment Number', portalTextControl('ad-apartmentNumber', 'apartmentNumber', data.apartmentNumber))}
+      <h2 class="portal-form-section">Airport</h2>
+      ${portalFieldRow('ad-mainAirportName', 'Main Airport Name', portalTextControl('ad-mainAirportName', 'mainAirportName', data.mainAirportName))}
+      ${portalFieldRow('ad-mainAirportTravelTime', 'Travel time to main airport (hours)', portalTextControl('ad-mainAirportTravelTime', 'mainAirportTravelTime', data.mainAirportTravelTime, 'number'))}
+      ${portalFieldRow('ad-altAirportName', 'Alternative Airport Name', portalTextControl('ad-altAirportName', 'altAirportName', data.altAirportName))}
+      ${portalFieldRow('ad-altAirportTravelTime', 'Travel time to alternative airport (hours)', portalTextControl('ad-altAirportTravelTime', 'altAirportTravelTime', data.altAirportTravelTime, 'number'))}
+      <div class="portal-form-actions">
+        <button class="button button-primary" type="submit">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderLanguagesForm(session: AuthSession | null): string {
+  const subject = claimToString(session?.claims.sub);
+
+  if (profileState.loading && profileState.loadedForSubject !== subject) {
+    return `
+      <div class="portal-placeholder" aria-live="polite">
+        <p class="portal-placeholder-title">Loading your profile…</p>
+      </div>
+    `;
+  }
+
+  const data = getLanguageLevels();
+  const loadError = profileState.error
+    ? `<div class="alert alert-error portal-alert" role="status">
+         <span>Could not load your saved profile: ${escapeHtml(profileState.error)}</span>
+         <button class="button button-ghost" type="button" data-action="retry-profile">Retry</button>
+       </div>`
+    : '';
+
+  const rows = LANGUAGES.map((language) =>
+    portalFieldRow(
+      `lang-${language.slug}`,
+      language.label,
+      portalSelectControl(
+        `lang-${language.slug}`,
+        language.slug,
+        data[language.slug] ?? '',
+        LANGUAGE_LEVEL_OPTIONS,
+        false,
+        'Select Level',
+      ),
+    ),
+  ).join('');
+
+  return `
+    ${loadError}
+    <form class="portal-form" id="profile-languages-form" novalidate>
+      ${rows}
+      <div class="portal-form-actions">
+        <button class="button button-primary" type="submit">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderProfessionalSkillsForm(session: AuthSession | null): string {
+  const subject = claimToString(session?.claims.sub);
+
+  if (profileState.loading && profileState.loadedForSubject !== subject) {
+    return `
+      <div class="portal-placeholder" aria-live="polite">
+        <p class="portal-placeholder-title">Loading your profile…</p>
+      </div>
+    `;
+  }
+
+  const data = getProfessionalSkills();
+  const loadError = profileState.error
+    ? `<div class="alert alert-error portal-alert" role="status">
+         <span>Could not load your saved profile: ${escapeHtml(profileState.error)}</span>
+         <button class="button button-ghost" type="button" data-action="retry-profile">Retry</button>
+       </div>`
+    : '';
+
+  const rows = PROFESSIONAL_SKILLS.map((skill) =>
+    portalFieldRow(
+      `skill-${skill.slug}`,
+      skill.label,
+      portalCheckboxControl(`skill-${skill.slug}`, skill.slug, data[skill.slug] ?? false),
+    ),
+  ).join('');
+
+  return `
+    ${loadError}
+    <form class="portal-form" id="profile-skills-form" novalidate>
+      ${rows}
+      <div class="portal-form-actions">
+        <button class="button button-primary" type="submit">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function portalVisaControl(slug: string, label: string, held: boolean, expiry: string): string {
+  return `
+    <div class="portal-visa-control">
+      <label class="portal-inline-check">
+        <input id="visa-${slug}-held" name="${escapeHtml(slug)}Held" type="checkbox"${held ? ' checked' : ''} />
+        <span>Held</span>
+      </label>
+      <input
+        name="${escapeHtml(slug)}Expiry"
+        type="date"
+        value="${escapeHtml(expiry)}"
+        aria-label="${escapeHtml(label)} expiry date"
+      />
+    </div>
+  `;
+}
+
+function renderVisasForm(session: AuthSession | null): string {
+  const subject = claimToString(session?.claims.sub);
+
+  if (profileState.loading && profileState.loadedForSubject !== subject) {
+    return `
+      <div class="portal-placeholder" aria-live="polite">
+        <p class="portal-placeholder-title">Loading your profile…</p>
+      </div>
+    `;
+  }
+
+  const data = getVisaDetails();
+  const loadError = profileState.error
+    ? `<div class="alert alert-error portal-alert" role="status">
+         <span>Could not load your saved profile: ${escapeHtml(profileState.error)}</span>
+         <button class="button button-ghost" type="button" data-action="retry-profile">Retry</button>
+       </div>`
+    : '';
+
+  const rows = VISAS.map((visa) => {
+    const entry = data.entries[visa.slug] ?? { held: false, expiry: '' };
+    return portalFieldRow(
+      `visa-${visa.slug}-held`,
+      visa.label,
+      portalVisaControl(visa.slug, visa.label, entry.held, entry.expiry),
+    );
+  }).join('');
+
+  return `
+    ${loadError}
+    <form class="portal-form" id="profile-visas-form" novalidate>
+      ${rows}
+      ${portalFieldRow('visa-otherVisas', 'Other visas', portalTextControl('visa-otherVisas', 'otherVisas', data.otherVisas))}
+      <p class="portal-field-hint">List other visas you have.</p>
+      <div class="portal-form-actions">
+        <button class="button button-primary" type="submit">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderRelativesForm(session: AuthSession | null): string {
+  const subject = claimToString(session?.claims.sub);
+
+  if (profileState.loading && profileState.loadedForSubject !== subject) {
+    return `
+      <div class="portal-placeholder" aria-live="polite">
+        <p class="portal-placeholder-title">Loading your profile…</p>
+      </div>
+    `;
+  }
+
+  const data = getRelativesDetails();
+  const loadError = profileState.error
+    ? `<div class="alert alert-error portal-alert" role="status">
+         <span>Could not load your saved profile: ${escapeHtml(profileState.error)}</span>
+         <button class="button button-ghost" type="button" data-action="retry-profile">Retry</button>
+       </div>`
+    : '';
+
+  return `
+    ${loadError}
+    <form class="portal-form" id="profile-relatives-form" novalidate>
+      <h2 class="portal-form-section">Relatives</h2>
+      ${portalFieldRow('rk-maritalStatus', 'Marital Status', portalSelectControl('rk-maritalStatus', 'maritalStatus', data.maritalStatus, MARITAL_STATUS_OPTIONS))}
+      ${portalFieldRow('rk-dateOfMarriage', 'Date of marriage', portalTextControl('rk-dateOfMarriage', 'dateOfMarriage', data.dateOfMarriage, 'date'))}
+      ${portalFieldRow('rk-numberOfChildren', 'Number of children', portalTextControl('rk-numberOfChildren', 'numberOfChildren', data.numberOfChildren, 'number'))}
+      ${portalFieldRow('rk-numberOfSons', 'Number of sons', portalTextControl('rk-numberOfSons', 'numberOfSons', data.numberOfSons, 'number'))}
+      ${portalFieldRow('rk-numberOfDaughters', 'Number of daughters', portalTextControl('rk-numberOfDaughters', 'numberOfDaughters', data.numberOfDaughters, 'number'))}
+      ${portalFieldRow('rk-fatherFullName', "Father's FULL NAME", portalTextControl('rk-fatherFullName', 'fatherFullName', data.fatherFullName))}
+      ${portalFieldRow('rk-motherFullName', "Mother's FULL NAME", portalTextControl('rk-motherFullName', 'motherFullName', data.motherFullName))}
+      <h2 class="portal-form-section">Next of Kin</h2>
+      ${portalFieldRow('rk-nokFirstName', 'Next of Kin First Name', portalTextControl('rk-nokFirstName', 'nokFirstName', data.nokFirstName))}
+      ${portalFieldRow('rk-nokMiddleName', 'Next of Kin Middle Name', portalTextControl('rk-nokMiddleName', 'nokMiddleName', data.nokMiddleName))}
+      ${portalFieldRow('rk-nokSurname', 'Next of Kin Surname', portalTextControl('rk-nokSurname', 'nokSurname', data.nokSurname))}
+      ${portalFieldRow('rk-nokAddress', 'Next of Kin Address', portalTextControl('rk-nokAddress', 'nokAddress', data.nokAddress))}
+      ${portalFieldRow('rk-nokRelationDegree', 'Next of Kin Relation Degree', portalTextControl('rk-nokRelationDegree', 'nokRelationDegree', data.nokRelationDegree))}
+      ${portalFieldRow('rk-nokContactPhone', 'Next of kin contact phone', portalTextControl('rk-nokContactPhone', 'nokContactPhone', data.nokContactPhone, 'tel'))}
+      ${portalFieldRow('rk-emergencyContactName', 'Emergency Contact Name', portalTextControl('rk-emergencyContactName', 'emergencyContactName', data.emergencyContactName))}
+      <div class="portal-form-actions">
+        <button class="button button-primary" type="submit">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderMiscForm(session: AuthSession | null): string {
+  const subject = claimToString(session?.claims.sub);
+
+  if (profileState.loading && profileState.loadedForSubject !== subject) {
+    return `
+      <div class="portal-placeholder" aria-live="polite">
+        <p class="portal-placeholder-title">Loading your profile…</p>
+      </div>
+    `;
+  }
+
+  const data = getMiscDetails();
+  const loadError = profileState.error
+    ? `<div class="alert alert-error portal-alert" role="status">
+         <span>Could not load your saved profile: ${escapeHtml(profileState.error)}</span>
+         <button class="button button-ghost" type="button" data-action="retry-profile">Retry</button>
+       </div>`
+    : '';
+
+  return `
+    ${loadError}
+    <form class="portal-form" id="profile-misc-form" novalidate>
+      ${portalFieldRow('ms-coverallSize', 'Working Coverall Size', portalTextControl('ms-coverallSize', 'coverallSize', data.coverallSize))}
+      ${portalFieldRow('ms-bodyWeight', 'Body Weight (kg)', portalTextControl('ms-bodyWeight', 'bodyWeight', data.bodyWeight, 'number'))}
+      ${portalFieldRow('ms-bodyHeight', 'Body Height (cm)', portalTextControl('ms-bodyHeight', 'bodyHeight', data.bodyHeight, 'number'))}
+      ${portalFieldRow('ms-shoeSize', 'Working Shoe Size', portalTextControl('ms-shoeSize', 'shoeSize', data.shoeSize))}
+      ${portalFieldRow('ms-religion', 'Religion', portalSelectControl('ms-religion', 'religion', data.religion, RELIGION_OPTIONS))}
+      ${portalFieldRow('ms-hairColor', 'Hair color', portalSelectControl('ms-hairColor', 'hairColor', data.hairColor, HAIR_COLOR_OPTIONS))}
+      ${portalFieldRow('ms-eyeColor', 'Eye color', portalSelectControl('ms-eyeColor', 'eyeColor', data.eyeColor, EYE_COLOR_OPTIONS))}
+      ${portalFieldRow('ms-bloodType', 'Blood type', portalSelectControl('ms-bloodType', 'bloodType', data.bloodType, BLOOD_TYPE_OPTIONS))}
+      ${portalFieldRow('ms-notes', 'Notes', portalTextareaControl('ms-notes', 'notes', data.notes))}
+      <p class="portal-field-hint">Any information you want to indicate.</p>
       <div class="portal-form-actions">
         <button class="button button-primary" type="submit">Save</button>
       </div>
@@ -1614,6 +2562,11 @@ function bindCurrentPage(session: AuthSession | null): void {
   if (session && getCurrentPath().startsWith('/profile')) {
     void loadProfileFromApi(session);
   }
+
+  // Load certificates once when entering any "Certificates" page.
+  if (session && getCurrentPath().startsWith('/certificates')) {
+    void loadCertificatesFromApi(session);
+  }
 }
 
 async function handleSubmit(event: SubmitEvent): Promise<void> {
@@ -1626,6 +2579,66 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
   if (form.id === 'profile-main-information-form') {
     event.preventDefault();
     await handleMainInformationSave(form);
+    return;
+  }
+
+  if (form.id === 'profile-contact-details-form') {
+    event.preventDefault();
+    await handleContactDetailsSave(form);
+    return;
+  }
+
+  if (form.id === 'profile-passport-form') {
+    event.preventDefault();
+    await handlePassportSave(form);
+    return;
+  }
+
+  if (form.id === 'profile-address-form') {
+    event.preventDefault();
+    await handleAddressSave(form);
+    return;
+  }
+
+  if (form.id === 'profile-languages-form') {
+    event.preventDefault();
+    await handleLanguagesSave(form);
+    return;
+  }
+
+  if (form.id === 'profile-skills-form') {
+    event.preventDefault();
+    await handleProfessionalSkillsSave(form);
+    return;
+  }
+
+  if (form.id === 'profile-visas-form') {
+    event.preventDefault();
+    await handleVisasSave(form);
+    return;
+  }
+
+  if (form.id === 'profile-relatives-form') {
+    event.preventDefault();
+    await handleRelativesSave(form);
+    return;
+  }
+
+  if (form.id === 'profile-misc-form') {
+    event.preventDefault();
+    await handleMiscSave(form);
+    return;
+  }
+
+  if (form.id === 'certificates-main-documents-form') {
+    event.preventDefault();
+    await handleMainDocumentsSave(form);
+    return;
+  }
+
+  if (form.classList.contains('certificate-entry-form')) {
+    event.preventDefault();
+    await handleCertificateEntrySave(form);
     return;
   }
 
@@ -1705,6 +2718,487 @@ async function handleMainInformationSave(form: HTMLFormElement): Promise<void> {
       sections: { ...profileState.sections, main: saved ?? data },
     };
     portalNotice = { path, message: 'Main information saved.', kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
+  renderApp();
+}
+
+async function handleContactDetailsSave(form: HTMLFormElement): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  if (!form.reportValidity()) {
+    return;
+  }
+
+  const data: ContactDetails = {
+    email: getFormValue(form, 'email'),
+    mobilePhone1: getFormValue(form, 'mobilePhone1'),
+    mobilePhone2: getFormValue(form, 'mobilePhone2'),
+    mobilePhone3: getFormValue(form, 'mobilePhone3'),
+    mobilePhone4: getFormValue(form, 'mobilePhone4'),
+    homeTelephone: getFormValue(form, 'homeTelephone'),
+  };
+
+  const path = '/profile/contact-details';
+  portalNotice = { path, message: 'Saving…', kind: 'info' };
+  renderApp();
+
+  try {
+    const saved = await apiRequest<Record<string, unknown>>(
+      '/api/customer/profile/contact',
+      session,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
+    );
+    profileState = {
+      ...profileState,
+      sections: { ...profileState.sections, contact: saved ?? data },
+    };
+    portalNotice = { path, message: 'Contact details saved.', kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
+  renderApp();
+}
+
+async function handlePassportSave(form: HTMLFormElement): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  if (!form.reportValidity()) {
+    return;
+  }
+
+  const data: PassportDetails = {
+    passportNumber: getFormValue(form, 'passportNumber'),
+    passportIssueDate: getFormValue(form, 'passportIssueDate'),
+    passportExpiryDate: getFormValue(form, 'passportExpiryDate'),
+    seamanBookNumber: getFormValue(form, 'seamanBookNumber'),
+    seamanBookIssueDate: getFormValue(form, 'seamanBookIssueDate'),
+    seamanBookExpiryDate: getFormValue(form, 'seamanBookExpiryDate'),
+    individualTaxNumber: getFormValue(form, 'individualTaxNumber'),
+  };
+
+  const path = '/profile/passport';
+  portalNotice = { path, message: 'Saving…', kind: 'info' };
+  renderApp();
+
+  try {
+    const saved = await apiRequest<Record<string, unknown>>(
+      '/api/customer/profile/passport',
+      session,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
+    );
+    profileState = {
+      ...profileState,
+      sections: { ...profileState.sections, passport: saved ?? data },
+    };
+    portalNotice = { path, message: 'Passport and Seaman book saved.', kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
+  renderApp();
+}
+
+async function handleAddressSave(form: HTMLFormElement): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  if (!form.reportValidity()) {
+    return;
+  }
+
+  const data: AddressDetails = {
+    country: getFormValue(form, 'country'),
+    province: getFormValue(form, 'province'),
+    city: getFormValue(form, 'city'),
+    postCode: getFormValue(form, 'postCode'),
+    street: getFormValue(form, 'street'),
+    houseNumber: getFormValue(form, 'houseNumber'),
+    apartmentNumber: getFormValue(form, 'apartmentNumber'),
+    mainAirportName: getFormValue(form, 'mainAirportName'),
+    mainAirportTravelTime: getFormValue(form, 'mainAirportTravelTime'),
+    altAirportName: getFormValue(form, 'altAirportName'),
+    altAirportTravelTime: getFormValue(form, 'altAirportTravelTime'),
+  };
+
+  const path = '/profile/address';
+  portalNotice = { path, message: 'Saving…', kind: 'info' };
+  renderApp();
+
+  try {
+    const saved = await apiRequest<Record<string, unknown>>(
+      '/api/customer/profile/address',
+      session,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
+    );
+    profileState = {
+      ...profileState,
+      sections: { ...profileState.sections, address: saved ?? data },
+    };
+    portalNotice = { path, message: 'Address and Airport saved.', kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
+  renderApp();
+}
+
+async function handleLanguagesSave(form: HTMLFormElement): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  if (!form.reportValidity()) {
+    return;
+  }
+
+  const data: LanguageLevels = {};
+  for (const language of LANGUAGES) {
+    data[language.slug] = getFormValue(form, language.slug);
+  }
+
+  const path = '/profile/languages';
+  portalNotice = { path, message: 'Saving…', kind: 'info' };
+  renderApp();
+
+  try {
+    const saved = await apiRequest<Record<string, unknown>>(
+      '/api/customer/profile/languages',
+      session,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
+    );
+    profileState = {
+      ...profileState,
+      sections: { ...profileState.sections, languages: saved ?? data },
+    };
+    portalNotice = { path, message: 'Languages saved.', kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
+  renderApp();
+}
+
+async function handleProfessionalSkillsSave(form: HTMLFormElement): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  if (!form.reportValidity()) {
+    return;
+  }
+
+  const data: ProfessionalSkills = {};
+  for (const skill of PROFESSIONAL_SKILLS) {
+    data[skill.slug] = formCheckbox(form, skill.slug);
+  }
+
+  const path = '/profile/professional-skills';
+  portalNotice = { path, message: 'Saving…', kind: 'info' };
+  renderApp();
+
+  try {
+    const saved = await apiRequest<Record<string, unknown>>(
+      '/api/customer/profile/skills',
+      session,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
+    );
+    profileState = {
+      ...profileState,
+      sections: { ...profileState.sections, skills: saved ?? data },
+    };
+    portalNotice = { path, message: 'Professional skills saved.', kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
+  renderApp();
+}
+
+async function handleVisasSave(form: HTMLFormElement): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  if (!form.reportValidity()) {
+    return;
+  }
+
+  const data: Record<string, unknown> = {};
+  for (const visa of VISAS) {
+    data[`${visa.slug}Held`] = formCheckbox(form, `${visa.slug}Held`);
+    data[`${visa.slug}Expiry`] = getFormValue(form, `${visa.slug}Expiry`);
+  }
+  data.otherVisas = getFormValue(form, 'otherVisas');
+
+  const path = '/profile/visas';
+  portalNotice = { path, message: 'Saving…', kind: 'info' };
+  renderApp();
+
+  try {
+    const saved = await apiRequest<Record<string, unknown>>('/api/customer/profile/visas', session, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    profileState = {
+      ...profileState,
+      sections: { ...profileState.sections, visas: saved ?? data },
+    };
+    portalNotice = { path, message: 'Visas saved.', kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
+  renderApp();
+}
+
+async function handleRelativesSave(form: HTMLFormElement): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  if (!form.reportValidity()) {
+    return;
+  }
+
+  const data: RelativesDetails = {
+    maritalStatus: getFormValue(form, 'maritalStatus'),
+    dateOfMarriage: getFormValue(form, 'dateOfMarriage'),
+    numberOfChildren: getFormValue(form, 'numberOfChildren'),
+    numberOfSons: getFormValue(form, 'numberOfSons'),
+    numberOfDaughters: getFormValue(form, 'numberOfDaughters'),
+    fatherFullName: getFormValue(form, 'fatherFullName'),
+    motherFullName: getFormValue(form, 'motherFullName'),
+    nokFirstName: getFormValue(form, 'nokFirstName'),
+    nokMiddleName: getFormValue(form, 'nokMiddleName'),
+    nokSurname: getFormValue(form, 'nokSurname'),
+    nokAddress: getFormValue(form, 'nokAddress'),
+    nokRelationDegree: getFormValue(form, 'nokRelationDegree'),
+    nokContactPhone: getFormValue(form, 'nokContactPhone'),
+    emergencyContactName: getFormValue(form, 'emergencyContactName'),
+  };
+
+  const path = '/profile/relatives';
+  portalNotice = { path, message: 'Saving…', kind: 'info' };
+  renderApp();
+
+  try {
+    const saved = await apiRequest<Record<string, unknown>>(
+      '/api/customer/profile/relatives',
+      session,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
+    );
+    profileState = {
+      ...profileState,
+      sections: { ...profileState.sections, relatives: saved ?? data },
+    };
+    portalNotice = { path, message: 'Relatives and next of kin saved.', kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
+  renderApp();
+}
+
+async function handleMiscSave(form: HTMLFormElement): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  if (!form.reportValidity()) {
+    return;
+  }
+
+  const data: MiscDetails = {
+    coverallSize: getFormValue(form, 'coverallSize'),
+    bodyWeight: getFormValue(form, 'bodyWeight'),
+    bodyHeight: getFormValue(form, 'bodyHeight'),
+    shoeSize: getFormValue(form, 'shoeSize'),
+    religion: getFormValue(form, 'religion'),
+    hairColor: getFormValue(form, 'hairColor'),
+    eyeColor: getFormValue(form, 'eyeColor'),
+    bloodType: getFormValue(form, 'bloodType'),
+    notes: getFormValue(form, 'notes'),
+  };
+
+  const path = '/profile/notes';
+  portalNotice = { path, message: 'Saving…', kind: 'info' };
+  renderApp();
+
+  try {
+    const saved = await apiRequest<Record<string, unknown>>('/api/customer/profile/misc', session, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    profileState = {
+      ...profileState,
+      sections: { ...profileState.sections, misc: saved ?? data },
+    };
+    portalNotice = { path, message: 'Notes and miscellaneous saved.', kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
+  renderApp();
+}
+
+async function handleCertificateEntrySave(form: HTMLFormElement): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  const category = form.dataset.certCategory ?? '';
+  const typeSlug = form.dataset.certType ?? '';
+  const catalogEntry = certificateCatalog(category).find((type) => type.slug === typeSlug);
+  const path = `/certificates/${category}`;
+
+  if (!form.reportValidity()) {
+    return;
+  }
+
+  const expiryDate = getFormValue(form, 'expiryDate');
+  if (expiryDate && expiryDate < todayIsoDate()) {
+    portalNotice = {
+      path,
+      message: 'Expiry date cannot be in the past; expired certificates are not accepted.',
+      kind: 'error',
+    };
+    renderApp();
+    return;
+  }
+
+  const data = {
+    number: getFormValue(form, 'number'),
+    issuedDate: getFormValue(form, 'issuedDate'),
+    expiryDate,
+    issuePlace: getFormValue(form, 'issuePlace'),
+    issuingAuthority: getFormValue(form, 'issuingAuthority'),
+  };
+
+  portalNotice = { path, message: 'Saving…', kind: 'info' };
+  renderApp();
+
+  try {
+    const saved = await apiRequest<Record<string, unknown>>(
+      `/api/customer/certificates/${category}/${typeSlug}`,
+      session,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
+    );
+    const categoryEntries = { ...(certificatesState.entries[category] ?? {}) };
+    categoryEntries[typeSlug] = saved ?? data;
+    certificatesState = {
+      ...certificatesState,
+      entries: { ...certificatesState.entries, [category]: categoryEntries },
+    };
+    expandedCertificates.add(`${category}:${typeSlug}`);
+    const label = catalogEntry?.label ?? 'Certificate';
+    portalNotice = { path, message: `${label} saved.`, kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
+  renderApp();
+}
+
+async function handleMainDocumentsSave(form: HTMLFormElement): Promise<void> {
+  const session = getSession();
+
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  const data: Record<string, boolean> = {};
+  for (const doc of MAIN_DOCUMENTS) {
+    data[doc.slug] = formCheckbox(form, doc.slug);
+  }
+
+  const path = '/certificates/main-documents';
+  portalNotice = { path, message: 'Saving…', kind: 'info' };
+  renderApp();
+
+  try {
+    const saved = await apiRequest<Record<string, unknown>>(
+      '/api/customer/certificates/main-documents',
+      session,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
+    );
+    const mainDocuments: Record<string, boolean> = {};
+    const source = saved ?? data;
+    for (const key of Object.keys(source)) {
+      mainDocuments[key] = source[key] === true;
+    }
+    certificatesState = { ...certificatesState, mainDocuments };
+    portalNotice = { path, message: 'Main documents saved.', kind: 'success' };
   } catch (error) {
     portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
   }
@@ -1887,6 +3381,14 @@ function getFormValue(form: HTMLFormElement, name: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+// Local calendar date as YYYY-MM-DD (matches <input type="date"> values).
+function todayIsoDate(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 function setAuthMode(mode: AuthMode, notice = '', kind: NoticeKind = 'info'): void {
   authMode = mode;
   authNotice = notice;
@@ -1964,6 +3466,49 @@ function handleClick(event: MouseEvent): void {
     const session = getSession();
     if (session) {
       void loadProfileFromApi(session, true);
+    }
+  }
+
+  if (action === 'retry-certificates') {
+    const session = getSession();
+    if (session) {
+      void loadCertificatesFromApi(session, true);
+    }
+  }
+
+  if (action === 'toggle-certificate') {
+    const key = actionElement.getAttribute('data-cert-key');
+    if (key) {
+      if (expandedCertificates.has(key)) {
+        expandedCertificates.delete(key);
+      } else {
+        expandedCertificates.add(key);
+      }
+      renderApp();
+    }
+  }
+
+  if (action === 'expand-filled-certificates') {
+    const category = actionElement.getAttribute('data-cert-category');
+    if (category) {
+      for (const type of certificateCatalog(category)) {
+        if (Object.keys(getCertificateEntry(category, type.slug)).length > 0) {
+          expandedCertificates.add(`${category}:${type.slug}`);
+        }
+      }
+      renderApp();
+    }
+  }
+
+  if (action === 'collapse-certificates') {
+    const category = actionElement.getAttribute('data-cert-category');
+    if (category) {
+      for (const key of [...expandedCertificates]) {
+        if (key.startsWith(`${category}:`)) {
+          expandedCertificates.delete(key);
+        }
+      }
+      renderApp();
     }
   }
 

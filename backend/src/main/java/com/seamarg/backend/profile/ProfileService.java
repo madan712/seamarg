@@ -18,7 +18,10 @@ class ProfileService {
 		ProfileSection.MAIN, List.of(
 			new RequiredField("firstName", "First name"),
 			new RequiredField("lastName", "Last name"),
-			new RequiredField("dateOfBirth", "Date of Birth")));
+			new RequiredField("dateOfBirth", "Date of Birth")),
+		ProfileSection.CONTACT, List.of(
+			new RequiredField("email", "Email Address"),
+			new RequiredField("mobilePhone1", "Mobile Phone Number 1")));
 
 	private final ProfileRepository profileRepository;
 	private final ObjectMapper objectMapper;
