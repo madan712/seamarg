@@ -171,18 +171,24 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
-  custom_error_response {
-    error_caching_min_ttl = 0
-    error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
-  }
+  # SPA fallback for the S3 origin. The frontend uses hash-based routing, so the browser
+  # only ever requests "/" (served by default_root_object) or hashed routes that never hit
+  # the origin path — a full 403/404 -> /index.html rewrite is unnecessary for deep links.
+  #
+  # A distribution-wide custom_error_response also rewrites 403/404 responses from the
+  # backend API origin (/api/*) into "200 + /index.html". That masks genuine API errors:
+  # the frontend receives HTML with a 200 status and reports the misleading
+  # "Backend API returned the frontend HTML page instead of JSON" error even though the
+  # /api/* behavior is routing correctly. Only rewrite errors from the S3 origin.
+  dynamic "custom_error_response" {
+    for_each = local.api_origin_enabled ? [] : [403, 404]
 
-  custom_error_response {
-    error_caching_min_ttl = 0
-    error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
+    content {
+      error_caching_min_ttl = 0
+      error_code            = custom_error_response.value
+      response_code         = 200
+      response_page_path    = "/index.html"
+    }
   }
 
   restrictions {
