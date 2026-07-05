@@ -2292,6 +2292,14 @@ p {
   cursor: pointer;
 }
 
+.link-button-danger {
+  color: #eb9280;
+}
+
+.certificate-file-discard {
+  margin-top: 8px;
+}
+
 .portal-form-actions {
   display: flex;
   gap: 12px;

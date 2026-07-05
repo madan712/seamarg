@@ -2134,6 +2134,11 @@ function renderCertificateEntry(category: string, type: CertificateType): string
           : ''
       }
       ${draftNote ? `<p class="portal-field-hint">${escapeHtml(draftNote)}</p>` : ''}
+      ${
+        draft
+          ? `<p class="certificate-file-discard"><button type="button" class="link-button link-button-danger" data-action="discard-certificate-draft" data-cert-category="${escapeHtml(category)}" data-cert-type="${escapeHtml(type.slug)}">Discard &amp; upload a different file</button></p>`
+          : ''
+      }
     </div>
   `;
 
@@ -3804,6 +3809,28 @@ function handleClick(event: MouseEvent): void {
     const session = getSession();
     if (session && category && typeSlug) {
       void openCertificateFile(session, category, typeSlug, action === 'download-certificate-file');
+    }
+  }
+
+  if (action === 'discard-certificate-draft') {
+    const category = actionElement.getAttribute('data-cert-category');
+    const typeSlug = actionElement.getAttribute('data-cert-type');
+    if (category && typeSlug) {
+      const key = `${category}:${typeSlug}`;
+      certificateDrafts.delete(key);
+      // Reset the file <input> so re-selecting the same filename still fires 'change'.
+      const fileInput = document.querySelector<HTMLInputElement>(
+        `#cert-${category}-${typeSlug}-file`,
+      );
+      if (fileInput) {
+        fileInput.value = '';
+      }
+      const path = `/certificates/${category}`;
+      if (portalNotice?.path === path) {
+        portalNotice = null;
+      }
+      expandedCertificates.add(key);
+      renderApp();
     }
   }
 
