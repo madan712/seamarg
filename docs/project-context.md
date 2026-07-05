@@ -10,6 +10,8 @@ At the end of long Codex sessions, use `docs/session-close-prompt.md` to update 
 
 `docs/frontend-prd.md` is the living frontend product record. Whenever a frontend feature is implemented, compare the change against the PRD before closing the session. If the feature is missing, add it to the relevant requirements, acceptance criteria, release phase, and implementation tracker so future chats can see what is done, what remains, and what is deferred.
 
+The redesigned private portal (built 2026-07-05) has its own detailed specs: `docs/private-portal-prd.md` (functional spec + build tracker for the 3-step portal), `docs/profile-data-design.md` (Cognito + DynamoDB two-channel design and the profile API), and `docs/certificates-design.md` (certificate data model, MiniMax extraction, and locked decisions D1–D4). Read these before touching the profile or certificate features.
+
 Do not commit or push during a context-save pass unless the user explicitly asks for it.
 
 ## Current Architecture
@@ -59,6 +61,20 @@ As of June 26, 2026, the backend also exposes authenticated customer certificate
 - `POST /api/customer/certificates`: upload a certificate/document file, store the file in S3, extract metadata with OpenAI when `OPENAI_API_KEY` is configured, fall back to local merchant-navy document/rank pattern extraction, and save metadata to DynamoDB.
 - `GET /api/customer/certificates/{certificateId}/download-url`: return a short-lived private S3 presigned URL for view/download.
 
+As of July 5, 2026, the backend also serves the redesigned private portal (see `docs/private-portal-prd.md`, `docs/profile-data-design.md`, `docs/certificates-design.md`). All are under `/api/customer/**` (Cognito JWT; `sub` always taken from the token, never the body):
+
+- Seafarer profile (one DynamoDB item per section):
+  - `GET /api/customer/profile`: returns all saved `PROFILE#*` sections keyed by section slug.
+  - `PUT /api/customer/profile/{section}`: upsert one section; `{section}` ∈ `main|contact|passport|address|languages|skills|visas|relatives|misc`. `main` requires `firstName`/`lastName`/`dateOfBirth`; `contact` requires `email`/`mobilePhone1`; unknown section → 400.
+- Certificate "Main documents" checklist: `GET`/`PUT /api/customer/certificates/main-documents` (held/not-held map stored as a single JSON item).
+- Detailed certificate entries (one item per catalog type):
+  - `GET /api/customer/certificates/entries`: saved entries grouped by category slug then type slug.
+  - `PUT /api/customer/certificates/{category}/{type}`: upsert one entry; `{category}` ∈ `general|ncoc|medical|tanker-passenger|offshore|flag-state`. Requires `issuedDate`/`issuePlace`/`issuingAuthority` (+ `cocGrade` for `ncoc`); rejects past `expiryDate`; unknown category → 400.
+  - `POST /api/customer/certificates/{category}/{type}/file` (multipart): store one scan in S3, read metadata with MiniMax, return `{extraction, file}` suggestions (does not itself persist the entry; the subsequent PUT persists fields + the nested `file` object). Returns 503 when the document bucket is unset.
+  - `GET /api/customer/certificates/{category}/{type}/download-url`: presigned URL for the entry's attached file (400 if none attached).
+
+The new certificate code reuses the S3 `DocumentStorage` and adds a generic `CertificateDataRepository` (JSON blob per `(user, sk)`, Dynamo + in-memory). The POC upload-first endpoints (`GET`/`POST /api/customer/certificates`, `.../download-url`) still exist and were left untouched. AI extraction for the new entry flow uses a self-contained `MiniMaxCertificateExtractor` + `CertificateEntryExtraction`; the POC `OpenAiCertificateExtractor`/`CertificateExtraction` were not modified.
+
 Admin credentials are configured through environment variables:
 
 - `SEAMARG_ADMIN_USERNAME`, default `admin`
@@ -72,8 +88,11 @@ Certificate/storage environment variables:
 - `SEAMARG_APP_DATA_TABLE`, required for persistent certificate metadata
 - `SEAMARG_CERTIFICATE_MAX_UPLOAD_BYTES`, default `10485760`
 - `SEAMARG_CERTIFICATE_DOWNLOAD_URL_TTL_SECONDS`, default `300`
-- `OPENAI_API_KEY`, optional; when absent the backend uses local extraction only
-- `SEAMARG_OPENAI_MODEL`, default `gpt-5.5`
+- `OPENAI_API_KEY`, optional; only used by the legacy POC certificate upload path
+- `SEAMARG_OPENAI_MODEL`, default `gpt-5.5` (legacy POC path only)
+- `SEAMARG_MINIMAX_API_KEY` (falls back to `MINIMAX_API_KEY`), optional; primary extractor for the new certificate-entry file flow. When absent (or on any failure/non-image), extraction returns empty suggestions and the user fills the form manually — nothing breaks.
+- `SEAMARG_MINIMAX_BASE_URL`, default `https://api.minimax.io/v1` (the extractor POSTs `{base}/chat/completions`)
+- `SEAMARG_MINIMAX_MODEL`, default `MiniMax-VL-01`; **must be a vision-capable model** to read image scans
 - `SEAMARG_CORS_ALLOWED_ORIGINS`, comma-separated browser origins allowed to call `/api/**`
 
 On EC2, provide these environment variables to the backend Docker container directly or through a host-local secret file that is not committed. `COGNITO_ISSUER_URI` should continue to come from the Terraform-created Cognito user pool. Attach the Terraform output `backend_runtime_data_policy_arn` to the backend runtime role or EC2 instance profile before relying on S3/DynamoDB access; do not commit or place long-lived AWS access keys in `/opt/seamarg/backend.env`.
@@ -119,7 +138,7 @@ The old dev EKS cluster was named `seamarg-dev-eks`, with backend namespace `sea
 Terraform now includes `infra/terraform/modules/data` for backend application data. In dev it creates:
 
 - Private S3 documents bucket named like `seamarg-dev-certificates-<account-id>` with public access blocked, bucket-owner-enforced ownership, AES256 encryption, versioning, incomplete multipart cleanup, and `prevent_destroy`.
-- Generic DynamoDB table named `seamarg-dev-app-data` using `pk` and `sk` plus `gsi1Pk`/`gsi1Sk` for a reusable single-table pattern. Certificate records use `pk=USER#<cognito-sub>` and `sk=CERTIFICATE#<certificate-id>`.
+- Generic DynamoDB table named `seamarg-dev-app-data` using `pk` and `sk` plus `gsi1Pk`/`gsi1Sk` for a reusable single-table pattern. All rows are keyed `pk=USER#<cognito-sub>`. Sort keys in use: legacy POC uploads `sk=CERTIFICATE#<certificate-id>`; profile sections `sk=PROFILE#<SECTION>` (MAIN/CONTACT/PASSPORT/ADDRESS/LANGUAGES/SKILLS/VISAS/RELATIVES/MISC); certificate main-documents checklist `sk=CERT#MAINDOCS`; detailed certificate entries `sk=CERT#<CATEGORY>#<TYPE_SLUG>` (category enum name, e.g. `CERT#GENERAL#stcw-basic-safety-training`). Profile/certificate items store the fields as a JSON `payload` attribute plus `updatedAt`.
 - IAM policy output `backend_runtime_data_policy_arn` granting the backend S3 object access and DynamoDB item access for this storage.
 
 The AWS provider currently validates this table with a deprecation warning for `hash_key`/`range_key`, but the installed provider version rejects the suggested `key_schema` block syntax. Keep the valid syntax until the provider docs and installed version align.
@@ -132,7 +151,13 @@ CloudFront proxies `/api/*` to the dev backend EC2 origin `ec2-65-1-132-40.ap-so
 
 As of June 26, 2026, the frontend is a vanilla TypeScript/Vite SPA with hash routing. It includes public Home, About, Help/FAQ, Contact, and Support pages; embedded Cognito User Pool forms for sign in, sign up, email verification, resend code, forgot password, and reset password; protected Dashboard, Profile, Certificates, Ask SeaMarg AI, Career Path, and Account routes; and a blank Dashboard shell as the post-login landing page.
 
-Successful Cognito login redirects to `#/dashboard`. Dashboard and Profile are intentionally blank/private shells for now until product content and backend APIs are approved. The Certificates route now uploads documents to the backend, lists certificate metadata, shows extracted document/rank/expiry status, and opens uploaded documents through protected download URL requests.
+As of July 5, 2026, the entire post-login private area was **replaced** by a new three-step seafarer portal (functional spec in `docs/private-portal-prd.md`). The old Dashboard / Ask SeaMarg AI / Career Path routes and the certificate POC UI were removed. The portal has a top stepper — **1. Your profile, 2. Certificates, 3. Sea service records** — with a left submenu per step, a dismissible welcome banner, and an account/log-out menu. Post-login now lands on **Step 1 → Guide to filling your profile** (not a dashboard). Signup collects First/Last name, Email, Mobile phone (E.164), Birth date, Password and writes the basics to Cognito standard attributes; profile field values persist to DynamoDB via the profile API (no submit step — everything is editable).
+
+- **Step 1 (Your profile) — complete**: Guide plus nine save-per-section forms (Main information, Contact details, Passport & Seaman book, Address & Airport, Languages, Professional skills, Visas, Relatives & next of kin, Notes & miscellaneous), each `GET`-prefilled and `PUT`-saved, prefilling from Cognito claims where relevant. Dummy option lists are used pending real reference data.
+- **Step 2 (Certificates) — complete**: Guide; a Main documents checkbox grid; and six detailed categories (General, NCOC, Medical, Tanker/Passenger, Offshore, Flag State) as accordions with an Expand-all⇄Collapse-all toggle + Expand-filled. Each entry has Number, Issued Date*, Expiry Date, Issue Place*, Issuing Authority* (NCOC adds required COC grade; Medical adds Clinic Name), required + past-expiry validation, and a themed drag-and-drop file dropzone that uploads a scan, reads it with MiniMax, prefills the form for review, and offers a "View file" presigned link. Catalogs are 6-item dummy lists for the POC — swapping the real (much longer) catalogs later is a pure data edit to the `*_CERTIFICATES` arrays, no code change.
+- **Step 3 (Sea service records)** — not built yet (only the Guide sub-page slug exists).
+
+The certificate area load is loop-safe (same guard pattern as the profile loader that fixed the earlier infinite-request bug): data loads once per Cognito subject, errors surface with an explicit Retry, and state resets on sign-out.
 
 Terraform creates:
 
@@ -155,6 +180,37 @@ Route 53/domain setup is intentionally deferred. For now, access the frontend us
 Terraform creates the customer Cognito user pool, frontend app client, and hosted UI domain. The current frontend uses embedded Cognito User Pool forms through the app client rather than redirecting to the hosted UI. Customer backend endpoints are designed to validate JWT tokens using `COGNITO_ISSUER_URI`.
 
 Native Cognito email sign-up is the current baseline. Google/Gmail social login is future work and will require adding a Google identity provider, client ID/secret handling, and supported identity providers in Terraform.
+
+## July 5, 2026 Session Notes
+
+This session redesigned and built the private portal (Steps 1–2). All work is committed to `main` (`78ab4db For profile and general certificate`, `c09d750 file uploading`); the working tree is clean at save time.
+
+What was built:
+
+- **Step 1 profile**: nine section forms + Guide, all wired to `GET/PUT /api/customer/profile`. Backend `com.seamarg.backend.profile` (`ProfileController`/`ProfileService`/repositories) with per-section required-field validation. Signup now writes given_name/family_name/phone_number/birthdate to Cognito.
+- **Step 2 certificates**: Main documents (`CERT#MAINDOCS`), six accordion categories (`CERT#<CATEGORY>#<TYPE_SLUG>`), and upload-first file/AI flow. New backend classes: `MainDocuments*`, `CertificateCategory`, `CertificateEntry*`, `CertificateFileService`, `CertificateDataRepository` (+ Dynamo/in-memory), `MiniMaxCertificateExtractor`, `CertificateEntryExtraction`; `DocumentStorage` gained a `(bucket, key, filename)` presign overload.
+- **MiniMax extraction (D4)**: chosen over OpenAI for the new flow. The user set `SEAMARG_MINIMAX_API_KEY`, `SEAMARG_MINIMAX_BASE_URL=https://api.minimax.io/v1`, `SEAMARG_MINIMAX_MODEL=MiniMax-M3` in `/opt/seamarg/backend.env` (secret key value not recorded here) and in the local IntelliJ run config.
+
+Open risks / things to verify when the MiniMax key is live (backend + frontend must be deployed first — the step-2 code was not deployed during this session, only committed):
+
+- **Vision model**: certificate reading sends the scan image to the model. `MiniMax-M3` may be text-only; if so, extraction returns empty (graceful) and the user types manually. Use a vision model (e.g. `MiniMax-VL-01`) if M3 can't read images — env-only change.
+- **Endpoint/shape**: the extractor assumes MiniMax's OpenAI-compatible `{base}/chat/completions` with `image_url` content parts and `response_format: json_object`. MiniMax's native API may instead be `/v1/text/chatcompletion_v2` with a different multimodal shape — that would be a small code change. On failure the extractor logs `status`, `model`, `url`, and a truncated response body (no key) to aid diagnosis; only images are sent (PDFs are skipped with a note for now).
+
+Lightweight checks that worked this session:
+
+```bash
+cd frontend && npx tsc --noEmit
+JAVA_HOME="/Users/madan.chaudhary/Library/Java/JavaVirtualMachines/ms-21.0.10/Contents/Home" ./gradlew :backend:test
+```
+
+- Local Java is not on PATH; the asdf-managed Microsoft JDK 21 at the `JAVA_HOME` above builds/tests successfully.
+- Frontend verification was done in the Claude preview against a stubbed `fetch`/session (synthetic `.click()` does not reach delegated handlers — dispatch `new MouseEvent('click',{bubbles:true})`, and set file inputs via a `DataTransfer` to trigger upload).
+
+Current next steps:
+
+- Deploy `target: frontend` and `target: backend`, set the MiniMax env vars on EC2, then upload an image on a certificate and confirm extraction (or read the diagnostic log line if it returns empty).
+- Build **Step 3 — Sea service records** (add/edit/list of multiple records; different shape from the fixed certificate catalog). A short mini-spec first is recommended.
+- Load the real (full) certificate catalogs into the `*_CERTIFICATES` frontend constants when the authoritative lists are provided.
 
 ## June 27, 2026 Session Notes
 

@@ -2,8 +2,10 @@
 
 Status: Living draft for product review and implementation tracking
 Owner: Product/Engineering  
-Last updated: 2026-06-27
+Last updated: 2026-07-05
 Primary sources: `SEA MARG.doc`, `SEA MARG DEV.doc`, `SEA MARG.doc.pptx`
+
+Note: the authenticated area was redesigned on 2026-07-05 into a three-step seafarer portal. The detailed functional spec for that portal lives in `docs/private-portal-prd.md` (with data/auth design in `docs/profile-data-design.md` and certificates in `docs/certificates-design.md`). Section 11 below and the tracker in 7.1 reflect the redesign; the older Dashboard/Ask-AI/Career-Path descriptions are retained as future product direction.
 
 ## 1. Product Summary
 
@@ -143,26 +145,28 @@ The client documents discuss mobile apps, OTP login, n8n, WhatsApp, PostgreSQL, 
 
 This PRD should be kept current as features are implemented. When a new feature is built and it is not already captured here, update the relevant requirements, acceptance criteria, release phase, and this tracker before closing the session.
 
-Last implementation update: 2026-06-27
+Last implementation update: 2026-07-05
 
 Implemented in the current frontend:
 
 - Public routes: Home, About, Help/FAQ, Contact, and Support.
 - Professional public layout, navigation, responsive styling, and footer.
-- Embedded Cognito User Pool forms for sign in, account creation, email verification code entry, resend verification code, forgot password, and reset password.
-- Protected routes for Dashboard, Profile, Certificates, Ask SeaMarg AI, Career Path, and Account.
-- Successful login redirects to Dashboard.
-- Dashboard and Profile are intentionally blank/private shells for now.
-- Certificates route has an authenticated upload form, API-backed certificate table, expiry/status indicators, and protected view/download flow through backend-generated short-lived document URLs.
+- Embedded Cognito User Pool forms for sign in, account creation, email verification code entry, resend verification code, forgot password, and reset password. Signup now also collects First name, Last name, Mobile phone (E.164), and Birth date and writes them to Cognito standard attributes.
+- **Redesigned private portal** (replaces the old Dashboard/Ask-AI/Career-Path area): top stepper (Your profile / Certificates / Sea service records) + per-step left submenu, dismissible welcome banner, and account/log-out menu. Post-login lands on Step 1 → Guide. See `docs/private-portal-prd.md`.
+- **Step 1 (Your profile) — complete**: Guide + nine save-per-section forms (Main information, Contact details, Passport & Seaman book, Address & Airport, Languages, Professional skills, Visas, Relatives & next of kin, Notes & miscellaneous). Each loads via `GET /api/customer/profile` and saves via `PUT /api/customer/profile/{section}` to DynamoDB, prefilling from the saved section or Cognito claims. Persistent and editable (no submit step). Dummy option lists pending real reference data.
+- **Step 2 (Certificates) — complete**: Guide; Main documents checkbox grid (`PUT /api/customer/certificates/main-documents`); six detailed categories (General, NCOC, Medical, Tanker/Passenger, Offshore, Flag State) as accordions with Expand-all⇄Collapse-all toggle + Expand-filled. Per-entry form (Number, Issued Date*, Expiry Date, Issue Place*, Issuing Authority*; NCOC adds required COC grade; Medical adds Clinic Name) with required + past-expiry validation, saving via `PUT /api/customer/certificates/{category}/{type}`. Themed drag-and-drop dropzone uploads a scan (`POST .../file`), reads it with MiniMax, prefills the form for review, and offers a "View file" presigned link. Catalogs are 6-item dummy lists for the POC.
+- Account page shows email + Cognito subject and sign-out; does not display tokens.
 - Local frontend environment template and dev environment support for Cognito user pool ID, app client ID, and API base URL.
 - Dev deployment workflow injects Cognito frontend values and the CloudFront same-origin API base URL from Terraform outputs during the frontend build.
-- Deployed certificate API calls use the frontend CloudFront `/api/*` proxy, avoiding HTTPS-to-HTTP mixed-content blocking in the browser.
+- Deployed API calls use the frontend CloudFront `/api/*` proxy, avoiding HTTPS-to-HTTP mixed-content blocking in the browser.
 
 Remaining or deferred:
 
-- Real dashboard content and backend-driven profile completion.
-- Profile, AI guidance, career path, advice history, support, and contact backend APIs.
-- Certificate missing-document checklist, reminders/notifications, retention controls, and malware scanning.
+- **Step 3 (Sea service records)**: not built (only the Guide sub-page slug exists) — add/edit/list of multiple records; a mini-spec is recommended first.
+- Real (full) certificate catalogs — swap the dummy `*_CERTIFICATES` arrays for the authoritative lists (pure data edit).
+- MiniMax vision-model / endpoint verification once the API key is live in dev (see §11.4 and `docs/certificates-design.md`).
+- Certificate missing-document checklist, expiry reminders/notifications, retention controls, and malware scanning.
+- AI guidance (Ask SeaMarg AI), career path, and advice-history backend APIs and pages.
 - Real support/contact submission channel.
 - Direct backend HTTPS/custom-domain API endpoint and production CORS strategy; current dev deployment uses CloudFront same-origin `/api/*` proxying.
 - WhatsApp, mobile OTP, n8n workflows, payments, company/institute portals, and admin governance tools.
@@ -354,6 +358,8 @@ Acceptance criteria:
 
 ## 11. Authenticated Seafarer Portal Requirements
 
+Redesign note (2026-07-05): the authenticated experience was rebuilt as a three-step portal — **Your profile**, **Certificates**, **Sea service records** — with a top stepper and per-step left submenu. This replaced the earlier Dashboard-landing model and the standalone Ask-AI/Career-Path routes. Post-login lands on Step 1 → Guide. The authoritative functional spec is `docs/private-portal-prd.md`; 11.2–11.4 below are updated to match, and 11.5–11.7 (AI, Career Path, Advice History) remain future product direction not currently routed in the portal.
+
 ### 11.1 Cognito Authentication
 
 User request for this repo: use Cognito for frontend login.
@@ -367,8 +373,8 @@ Required behavior:
 - Allow users to request and enter a password reset code.
 - Use the Cognito frontend app client with SRP-based username/password authentication.
 - Store session safely for SPA constraints.
-- Redirect successful sign-in to Dashboard.
-- Support logout by clearing the local SPA session.
+- Redirect successful sign-in to the portal landing page (Step 1 → Guide to filling your profile; previously Dashboard).
+- Support logout by clearing the local SPA session (log out is a menu item in the portal).
 - Redirect unauthenticated users away from protected pages.
 - Handle missing config, failed sign-in, unverified email, expired/incorrect codes, and failed reset flows.
 
@@ -382,16 +388,13 @@ Product note:
 
 - Client docs mention mobile OTP and WhatsApp onboarding. That should be treated as a future auth/onboarding track unless the product owner decides to replace or extend the current Cognito form flow.
 
-### 11.2 Dashboard
+### 11.2 Dashboard (superseded by the portal Guide landing)
 
-Purpose: First protected landing page after login.
+Status (2026-07-05): The blank Dashboard shell was **removed** in the portal redesign. The post-login landing page is now Step 1 → **Guide to filling your profile** (an informational page: what the profile is used for, how to fill it, "keep validity dates current", and a "contact your assigned crewing officer" note). The auth guard still protects the whole portal.
 
-Required content for MVP:
+The dashboard concepts below (profile strength, expiring-document alerts, AI/career cards, rule-confidence summary, subscription status) remain **future product direction** and are not currently routed.
 
-- Current agreed MVP behavior: keep the post-login Dashboard blank for now.
-- Dashboard is the landing page after successful login.
-- Dashboard must remain protected by the auth guard.
-- Future content should be added only when product direction and backend APIs are approved.
+Future content:
 
 Future content:
 
@@ -440,8 +443,9 @@ Client-specified profile fields:
 
 MVP behavior:
 
-- If backend profile APIs are not available, provide an API-ready static form or disabled preview.
-- Avoid saving data locally unless explicitly approved.
+- Status (2026-07-05): **Implemented** as Step 1 of the portal — nine save-per-section forms persisting to DynamoDB via `GET/PUT /api/customer/profile` (see `docs/private-portal-prd.md` §4 and `docs/profile-data-design.md`). Sections: Main information, Contact details, Passport & Seaman book, Address & Airport, Languages, Professional skills, Visas, Relatives & next of kin, Notes & miscellaneous.
+- The built field set follows the redesigned portal spec (broader than the original client list above), with dummy option lists (sex, position, citizenship, education, COC grade, etc.) pending authoritative reference data. The client-specified fields above are retained as source reference; reconcile the final field list with the client when real option data is loaded.
+- Basics captured at signup (first/last name, email, phone, birth date) go to Cognito standard attributes and prefill the relevant sections; profile field values persist to DynamoDB. Profile is always editable — there is no submit step.
 
 ### 11.4 Certificates
 
@@ -468,13 +472,17 @@ Required UI concepts:
 - AI extraction results for document name, rank, expiry date, issuer, certificate number, and review confidence when available.
 - Protected view/download action for uploaded documents.
 
+Status (2026-07-05): **Implemented** as Step 2 of the portal, catalog-driven rather than the earlier free-form POC (see `docs/certificates-design.md`). A Main documents checkbox grid plus six detailed categories (General, NCOC, Medical, Tanker/Passenger, Offshore, Flag State) rendered as accordions with an Expand-all⇄Collapse-all toggle and Expand-filled. Each entry: Number, Issued Date*, Expiry Date, Issue Place*, Issuing Authority* (NCOC adds required COC grade; Medical adds Clinic Name), with required + past-expiry validation (client and server). A themed drag-and-drop dropzone uploads one PDF/image scan, which is stored in S3 and read by **MiniMax** to prefill the form for review before Save; "View file" opens a presigned URL. Certificate catalogs are 6-item dummy lists for the POC.
+
 Acceptance criteria:
 
-- Certificates page loads records from protected customer APIs and shows an honest empty or error state.
+- Certificate data loads from protected customer APIs (loop-safe, once per session) and shows honest loading/empty/error states with a Retry.
 - Uploads are sent to the backend only after Cognito login.
-- Uploaded files are stored privately in S3 and metadata is stored in the generic backend DynamoDB table.
+- Uploaded files are stored privately in S3; entry fields + file metadata are stored in the generic backend DynamoDB table (`CERT#<CATEGORY>#<TYPE_SLUG>`), main documents in `CERT#MAINDOCS`.
 - The frontend never stores raw documents locally and opens documents only through backend-generated short-lived URLs.
-- Malware scanning, retention policy, and reminder delivery remain deferred production hardening items.
+- Expired certificates are rejected; expiry dates are validated on client and server.
+- AI extraction is best-effort: if MiniMax is unconfigured, the file is a non-image, or the call fails, the upload still succeeds and the user fills the form manually.
+- Malware scanning, retention policy, reminder delivery, and the full authoritative certificate catalogs remain deferred items.
 
 ### 11.5 Ask SeaMarg AI
 
@@ -670,9 +678,9 @@ The DEV document proposes these future API groups:
 Current repo reality:
 
 - Cognito is already set up for customer auth.
-- Backend has test/demo public and customer APIs plus authenticated certificate upload/list/download-url APIs.
+- Backend has test/demo public and customer APIs; the legacy POC certificate upload/list/download-url APIs; the seafarer profile API (`GET/PUT /api/customer/profile/{section}`); and the certificate portal APIs (`GET/PUT /api/customer/certificates/main-documents`, `GET /api/customer/certificates/entries`, `PUT/POST /api/customer/certificates/{category}/{type}[/file]`, `.../download-url`). Certificate scan extraction uses **MiniMax** (OpenAI-compatible chat-completions, vision model) with a graceful no-op fallback; the legacy POC path used OpenAI.
 - Dev frontend API calls are routed through the same CloudFront origin at `/api/*`, which forwards to the current HTTP EC2 backend origin.
-- Contact/support, profile, AI query, subscriptions, jobs, and WhatsApp APIs are not implemented.
+- Contact/support, AI query, subscriptions, jobs, and WhatsApp APIs are not implemented. Sea service records (portal Step 3) API is not implemented.
 
 Frontend implication:
 
@@ -726,12 +734,14 @@ Accessibility:
 ### Phase 1: Professional Web MVP
 
 - Home, About, Help/FAQ, Contact, Support.
-- Embedded Cognito sign in, sign up, email verification, password reset, and logout.
+- Embedded Cognito sign in, sign up (with name/phone/DOB), email verification, password reset, and logout.
 - Protected route guard.
-- Blank seafarer dashboard shell as the post-login landing page.
+- Three-step seafarer portal (Your profile / Certificates / Sea service records) replacing the blank dashboard; post-login lands on Step 1 → Guide.
+- Step 1 (Your profile): Guide + nine save-per-section forms wired to the profile API. ✅
+- Step 2 (Certificates): Guide, Main documents, six accordion categories with per-entry save, drag-and-drop upload, and MiniMax extraction. ✅
+- Step 3 (Sea service records): pending.
 - Account page.
-- Certificates upload/list/view experience.
-- Profile, Ask SeaMarg AI, Career Path, and Advice History as API-ready pages or coming-soon/empty states.
+- Ask SeaMarg AI, Career Path, and Advice History remain future direction (not routed in the portal).
 - Clear advisory, non-manning-agent, and trust copy.
 - Build and typecheck passing.
 
@@ -803,6 +813,9 @@ Accessibility:
 - When should WhatsApp-first access become part of the product scope?
 - Who will own DG Shipping rule review and AI response governance?
 - What backend API phase should follow immediately after frontend MVP?
+- What are the authoritative certificate catalogs per category (the portal currently uses 6-item dummy lists), and the real option lists for profile dropdowns (position, citizenship, COC grade, etc.)?
+- Which MiniMax vision model and endpoint are correct for certificate scan reading (POC assumes `MiniMax-VL-01` + OpenAI-compatible `/chat/completions`; the user configured `MiniMax-M3`)?
+- Do the redesigned profile field sets (from the Alpha Crew-style portal) supersede the original client profile field list in §11.3, and should Ask AI / Career Path / Advice History be re-introduced into the portal later?
 
 ## 22. Implementation Notes for Frontend Build
 

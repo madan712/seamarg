@@ -183,9 +183,12 @@ SEAMARG_AWS_REGION=ap-south-1
 AWS_REGION=ap-south-1
 SEAMARG_DOCUMENT_BUCKET=<terraform-output-documents_bucket_name>
 SEAMARG_APP_DATA_TABLE=<terraform-output-app_data_table_name>
+SEAMARG_MINIMAX_API_KEY=<minimax-api-key>
+SEAMARG_MINIMAX_BASE_URL=https://api.minimax.io/v1
+SEAMARG_MINIMAX_MODEL=<minimax-vision-model>
 ```
 
-Keep `SEAMARG_ADMIN_PASSWORD` out of Git and Terraform state. The Cognito issuer and certificate storage names come from dev Terraform outputs:
+`SEAMARG_MINIMAX_*` powers certificate scan extraction (Step 2 of the portal); the model must be vision-capable. It is optional — without it, certificate uploads still work and the user fills the form manually. Keep `SEAMARG_ADMIN_PASSWORD` and `SEAMARG_MINIMAX_API_KEY` out of Git and Terraform state. The Cognito issuer and certificate storage names come from dev Terraform outputs:
 
 ```bash
 terraform -chdir=infra/terraform/environments/dev output -raw cognito_issuer_uri
