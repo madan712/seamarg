@@ -696,7 +696,7 @@ The current frontend is hosted via HTTPS CloudFront. The current backend context
 Before production API features are considered complete:
 
 - Backend API needs HTTPS.
-- Backend CORS must allow localhost development origins; deployed same-origin CloudFront API calls do not rely on browser CORS.
+- Backend CORS must allow localhost development origins **and** the deployed CloudFront origin. Although the deployed frontend calls the API on the same CloudFront domain, the backend sits behind CloudFront over HTTP and sees the viewer `Origin` header as cross-origin, so it enforces CORS on state-changing requests (POST/PUT). The CloudFront origin must be in `SEAMARG_CORS_ALLOWED_ORIGINS` or those requests fail with `403`.
 - `VITE_API_BASE_URL` must be environment-specific when bypassing the same-origin CloudFront API proxy.
 - Contact/support data submission path must be approved.
 - Certificate upload storage now uses a private Terraform-managed S3 bucket, a generic DynamoDB table, and a Terraform-managed backend EC2 runtime role/profile in dev; production hardening still needs malware scanning, retention rules, and operational backup/restore review.

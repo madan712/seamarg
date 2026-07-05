@@ -120,7 +120,12 @@ class MiniMaxCertificateExtractor {
 				log.warn("MiniMax extraction had no usable content: body={}", truncate(responseBody));
 				return CertificateEntryExtraction.empty("minimax-error", "AI reading returned no usable content.");
 			}
-			var extraction = objectMapper.readTree(contentNode.asText());
+			var jsonContent = extractJsonObject(contentNode.asText());
+			if (jsonContent == null) {
+				log.warn("MiniMax extraction content had no JSON object: content={}", truncate(contentNode.asText()));
+				return CertificateEntryExtraction.empty("minimax-error", "AI reading returned no usable content.");
+			}
+			var extraction = objectMapper.readTree(jsonContent);
 
 			return new CertificateEntryExtraction(
 				text(extraction, "number"),
@@ -135,6 +140,25 @@ class MiniMaxCertificateExtractor {
 			log.warn("Could not parse MiniMax extraction response", exception);
 			return CertificateEntryExtraction.empty("minimax-error", "AI reading returned an unreadable response.");
 		}
+	}
+
+	/**
+	 * Isolates the JSON object from a model's raw content. Reasoning models such as
+	 * MiniMax-M3 prefix their answer with a {@code <think>...</think>} block, and many
+	 * models wrap JSON in Markdown code fences, so the content cannot be parsed directly.
+	 * Returns the substring from the first '{' to the last '}', or {@code null} if none.
+	 */
+	private static String extractJsonObject(String content) {
+		if (!StringUtils.hasText(content)) {
+			return null;
+		}
+		var withoutReasoning = content.replaceAll("(?s)<think>.*?</think>", "");
+		var start = withoutReasoning.indexOf('{');
+		var end = withoutReasoning.lastIndexOf('}');
+		if (start < 0 || end <= start) {
+			return null;
+		}
+		return withoutReasoning.substring(start, end + 1);
 	}
 
 	private static double clampConfidence(double value) {

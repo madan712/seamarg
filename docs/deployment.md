@@ -70,6 +70,14 @@ terraform -chdir=infra/terraform/environments/dev output -raw backend_ec2_instan
 
 Set those values in the backend container env file on the EC2 host as `COGNITO_ISSUER_URI`, `SEAMARG_DOCUMENT_BUCKET`, and `SEAMARG_APP_DATA_TABLE`.
 
+`SEAMARG_CORS_ALLOWED_ORIGINS` must include the deployed CloudFront domain (`https://<frontend_cloudfront_domain_name>`), not only the localhost dev origins. Even though the browser calls the API on the same CloudFront origin as the page, the backend sits behind CloudFront over HTTP: it receives the viewer's `Origin` header while its own host/scheme is the EC2 HTTP address, so Spring treats state-changing requests (POST/PUT — which carry an `Origin` header) as cross-origin and rejects them with `403` if the CloudFront origin is not allowlisted. Same-origin GETs omit the `Origin` header and are unaffected, which is why list/read pages load but uploads and saves fail. Example:
+
+```text
+SEAMARG_CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,https://<frontend_cloudfront_domain_name>
+```
+
+Because `docker run --env-file` reads the file only at container creation, edit `backend.env` and then recreate the container (`docker rm -f seamarg-backend` + `docker run ...`) or re-run the backend deploy; a plain `docker restart` will not pick up the new value.
+
 ## Backend EC2 Deployment
 
 The dev backend host is:
