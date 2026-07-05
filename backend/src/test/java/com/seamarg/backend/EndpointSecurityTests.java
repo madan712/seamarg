@@ -203,6 +203,29 @@ class EndpointSecurityTests {
 	}
 
 	@Test
+	void customerCertificateFileUploadRequiresJwt() throws Exception {
+		var file = new MockMultipartFile("file", "cert.png", "image/png", new byte[] { 1, 2, 3 });
+		mockMvc.perform(multipart("/api/customer/certificates/general/stcw-basic-safety-training/file").file(file))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void customerCertificateFileUploadNeedsConfiguredStorage() throws Exception {
+		var file = new MockMultipartFile("file", "cert.png", "image/png", new byte[] { 1, 2, 3 });
+		mockMvc.perform(multipart("/api/customer/certificates/general/stcw-basic-safety-training/file")
+				.file(file)
+				.with(jwt().jwt(token -> token.subject("cert-file-1"))))
+			.andExpect(status().isServiceUnavailable());
+	}
+
+	@Test
+	void customerCertificateDownloadUrlWithoutFileFails() throws Exception {
+		mockMvc.perform(get("/api/customer/certificates/general/stcw-basic-safety-training/download-url")
+				.with(jwt().jwt(token -> token.subject("cert-file-2"))))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
 	void adminEndpointRequiresStaticPassword() throws Exception {
 		mockMvc.perform(get("/api/admin/hello")).andExpect(status().isUnauthorized());
 	}

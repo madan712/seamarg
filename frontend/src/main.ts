@@ -331,6 +331,21 @@ let certificatesState: CertificatesState = {
 // Which accordion entries are expanded, keyed by `${category}:${typeSlug}`.
 const expandedCertificates = new Set<string>();
 
+// Uploaded-but-unsaved file metadata + AI suggestions per entry, keyed the same way.
+type CertificateFileMeta = {
+  bucketName?: string;
+  objectKey?: string;
+  originalFilename?: string;
+  contentType?: string;
+  sizeBytes?: number;
+};
+type CertificateDraft = {
+  file?: CertificateFileMeta;
+  extraction?: Record<string, string | null>;
+  note?: string;
+};
+const certificateDrafts = new Map<string, CertificateDraft>();
+
 function resetCertificatesState(): void {
   certificatesState = {
     loadedForSubject: null,
@@ -340,6 +355,7 @@ function resetCertificatesState(): void {
     error: '',
   };
   expandedCertificates.clear();
+  certificateDrafts.clear();
 }
 
 // Dummy option lists — replaced with real reference data later (PRD §9).
@@ -465,12 +481,72 @@ const GENERAL_CERTIFICATES: CertificateType[] = [
   { slug: 'ship-security-awareness', label: 'Ship Security Awareness' },
 ];
 
-// Catalog lookup by category slug (only General is built so far).
+const NCOC_CERTIFICATES: CertificateType[] = [
+  { slug: 'coc-deck', label: 'Certificate of Competency — Deck' },
+  { slug: 'coc-engine', label: 'Certificate of Competency — Engine' },
+  { slug: 'gmdss-radio-operator', label: 'GMDSS Radio Operator' },
+];
+
+const MEDICAL_CERTIFICATES: CertificateType[] = [
+  { slug: 'medical-fitness', label: 'Medical Fitness (ILO/MLC)' },
+  { slug: 'drug-alcohol-test', label: 'Drug & Alcohol Test' },
+  { slug: 'yellow-fever-vaccination', label: 'Yellow Fever Vaccination' },
+];
+
+const TANKER_CERTIFICATES: CertificateType[] = [
+  { slug: 'basic-oil-chemical-tanker', label: 'Basic Training Oil & Chemical Tanker' },
+  { slug: 'advanced-oil-tanker', label: 'Advanced Oil Tanker Operations' },
+  { slug: 'liquefied-gas-tanker', label: 'Liquefied Gas Tanker' },
+  { slug: 'passenger-ship-crowd-management', label: 'Passenger Ship Crowd Management' },
+];
+
+const OFFSHORE_CERTIFICATES: CertificateType[] = [
+  { slug: 'bosiet', label: 'BOSIET' },
+  { slug: 'huet', label: 'HUET' },
+  { slug: 'foet', label: 'FOET' },
+  { slug: 't-bosiet', label: 'T-BOSIET' },
+];
+
+const FLAG_STATE_CERTIFICATES: CertificateType[] = [
+  { slug: 'panama-endorsement', label: 'Panama Flag Endorsement' },
+  { slug: 'liberia-endorsement', label: 'Liberia Flag Endorsement' },
+  { slug: 'marshall-islands-endorsement', label: 'Marshall Islands Flag Endorsement' },
+];
+
+const CERTIFICATE_CATALOGS: Record<string, CertificateType[]> = {
+  general: GENERAL_CERTIFICATES,
+  ncoc: NCOC_CERTIFICATES,
+  medical: MEDICAL_CERTIFICATES,
+  'tanker-passenger': TANKER_CERTIFICATES,
+  offshore: OFFSHORE_CERTIFICATES,
+  'flag-state': FLAG_STATE_CERTIFICATES,
+};
+
+// Dummy COC grades (NCOC only) — real reference data loads later.
+const COC_GRADE_OPTIONS = [
+  'Master',
+  'Chief Mate',
+  'Officer in Charge of a Navigational Watch',
+  'Chief Engineer',
+  'Second Engineer',
+  'Engineer Officer in Charge of a Watch',
+];
+
+// Category-specific fields beyond the common set (PRD §5.3).
+type CertificateExtraField = {
+  key: string;
+  label: string;
+  type: 'text' | 'select';
+  options?: string[];
+  required?: boolean;
+};
+const CERTIFICATE_EXTRA_FIELDS: Record<string, CertificateExtraField[]> = {
+  ncoc: [{ key: 'cocGrade', label: 'COC grade', type: 'select', options: COC_GRADE_OPTIONS, required: true }],
+  medical: [{ key: 'clinicName', label: 'Clinic Name', type: 'text' }],
+};
+
 function certificateCatalog(categorySlug: string): CertificateType[] {
-  if (categorySlug === 'general') {
-    return GENERAL_CERTIFICATES;
-  }
-  return [];
+  return CERTIFICATE_CATALOGS[categorySlug] ?? [];
 }
 
 // Visas — each has a "held" checkbox plus an expiry date.
@@ -1735,8 +1811,8 @@ function renderPrivateSubPageBody(
     return renderMainDocumentsForm(session);
   }
 
-  if (step.path === '/certificates' && sub.slug === 'general') {
-    return renderCertificateCategory(session, 'general');
+  if (step.path === '/certificates' && certificateCatalog(sub.slug).length > 0) {
+    return renderCertificateCategory(session, sub.slug);
   }
 
   return `
@@ -1936,6 +2012,22 @@ function getCertificateEntry(category: string, typeSlug: string): Record<string,
   return certificatesState.entries[category]?.[typeSlug] ?? {};
 }
 
+// Field value for an entry form: saved value wins; otherwise fall back to an
+// AI suggestion from a just-uploaded file (draft), else empty.
+function certificateFieldValue(
+  category: string,
+  typeSlug: string,
+  saved: Record<string, unknown>,
+  field: string,
+): string {
+  const savedValue = savedString(saved, field);
+  if (savedValue) {
+    return savedValue;
+  }
+  const suggestion = certificateDrafts.get(`${category}:${typeSlug}`)?.extraction?.[field];
+  return typeof suggestion === 'string' ? suggestion : '';
+}
+
 function renderCertificateCategory(session: AuthSession | null, category: string): string {
   const subject = claimToString(session?.claims.sub);
 
@@ -1956,6 +2048,8 @@ function renderCertificateCategory(session: AuthSession | null, category: string
 
   const catalog = certificateCatalog(category);
   const rows = catalog.map((type) => renderCertificateEntry(category, type)).join('');
+  const allExpanded =
+    catalog.length > 0 && catalog.every((type) => expandedCertificates.has(`${category}:${type.slug}`));
 
   return `
     ${loadError}
@@ -1963,10 +2057,10 @@ function renderCertificateCategory(session: AuthSession | null, category: string
       Expand a certificate to fill in its details, then Save. Expired certificates are not accepted.
     </p>
     <div class="certificate-toolbar">
-      <button class="button button-ghost button-small" type="button"
+      <button class="button button-secondary button-small" type="button"
+        data-action="toggle-all-certificates" data-cert-category="${escapeHtml(category)}">${allExpanded ? 'Collapse all' : 'Expand all'}</button>
+      <button class="button button-secondary button-small" type="button"
         data-action="expand-filled-certificates" data-cert-category="${escapeHtml(category)}">Expand filled</button>
-      <button class="button button-ghost button-small" type="button"
-        data-action="collapse-certificates" data-cert-category="${escapeHtml(category)}">Collapse all</button>
     </div>
     <div class="certificate-accordion">${rows}</div>
   `;
@@ -1993,6 +2087,55 @@ function renderCertificateEntry(category: string, type: CertificateType): string
     </button>
   `;
 
+  const value = (field: string): string => certificateFieldValue(category, type.slug, entry, field);
+  const extraFields = (CERTIFICATE_EXTRA_FIELDS[category] ?? [])
+    .map((field) => {
+      const control =
+        field.type === 'select'
+          ? portalSelectControl(`${idBase}-${field.key}`, field.key, value(field.key), field.options ?? [], field.required)
+          : portalTextControl(`${idBase}-${field.key}`, field.key, value(field.key), 'text', field.required);
+      return portalFieldRow(`${idBase}-${field.key}`, field.label, control, field.required);
+    })
+    .join('');
+  const draft = certificateDrafts.get(key);
+  const savedFile = entry.file && typeof entry.file === 'object' ? (entry.file as CertificateFileMeta) : undefined;
+  const fileMeta = draft?.file ?? savedFile;
+  const draftNote = draft?.note;
+
+  const fileSection = `
+    <div
+      class="certificate-file"
+      data-cert-dropzone
+      data-cert-category="${escapeHtml(category)}"
+      data-cert-type="${escapeHtml(type.slug)}"
+    >
+      <input
+        id="${idBase}-file"
+        class="certificate-file-input"
+        type="file"
+        accept=".pdf,image/*"
+        data-cert-file
+        data-cert-category="${escapeHtml(category)}"
+        data-cert-type="${escapeHtml(type.slug)}"
+      />
+      <label class="certificate-dropzone" for="${idBase}-file">
+        <span class="certificate-dropzone-icon" aria-hidden="true">⬆</span>
+        <span class="certificate-dropzone-cta">Drag &amp; drop a scan here, or <span class="certificate-dropzone-browse">browse</span></span>
+        <span class="certificate-dropzone-hint">PDF or image — we'll read the details for you to review.</span>
+      </label>
+      ${
+        fileMeta?.originalFilename
+          ? `<p class="certificate-file-current">Attached: <strong>${escapeHtml(fileMeta.originalFilename)}</strong>${
+              savedFile?.objectKey
+                ? ` · <button type="button" class="link-button" data-action="view-certificate-file" data-cert-category="${escapeHtml(category)}" data-cert-type="${escapeHtml(type.slug)}">View file</button>`
+                : ' <span class="certificate-file-pending">(save to keep)</span>'
+            }</p>`
+          : ''
+      }
+      ${draftNote ? `<p class="portal-field-hint">${escapeHtml(draftNote)}</p>` : ''}
+    </div>
+  `;
+
   const body = expanded
     ? `
       <div class="certificate-entry-body">
@@ -2002,11 +2145,13 @@ function renderCertificateEntry(category: string, type: CertificateType): string
           data-cert-type="${escapeHtml(type.slug)}"
           novalidate
         >
-          ${portalFieldRow(`${idBase}-number`, 'Number', portalTextControl(`${idBase}-number`, 'number', savedString(entry, 'number')))}
-          ${portalFieldRow(`${idBase}-issuedDate`, 'Issued Date', portalTextControl(`${idBase}-issuedDate`, 'issuedDate', savedString(entry, 'issuedDate'), 'date', true), true)}
-          ${portalFieldRow(`${idBase}-expiryDate`, 'Expiry Date', portalTextControl(`${idBase}-expiryDate`, 'expiryDate', savedString(entry, 'expiryDate'), 'date'))}
-          ${portalFieldRow(`${idBase}-issuePlace`, 'Issue Place', portalTextControl(`${idBase}-issuePlace`, 'issuePlace', savedString(entry, 'issuePlace'), 'text', true), true)}
-          ${portalFieldRow(`${idBase}-issuingAuthority`, 'Issuing Authority', portalTextControl(`${idBase}-issuingAuthority`, 'issuingAuthority', savedString(entry, 'issuingAuthority'), 'text', true), true)}
+          ${portalFieldRow(`${idBase}-number`, 'Number', portalTextControl(`${idBase}-number`, 'number', value('number')))}
+          ${portalFieldRow(`${idBase}-issuedDate`, 'Issued Date', portalTextControl(`${idBase}-issuedDate`, 'issuedDate', value('issuedDate'), 'date', true), true)}
+          ${portalFieldRow(`${idBase}-expiryDate`, 'Expiry Date', portalTextControl(`${idBase}-expiryDate`, 'expiryDate', value('expiryDate'), 'date'))}
+          ${portalFieldRow(`${idBase}-issuePlace`, 'Issue Place', portalTextControl(`${idBase}-issuePlace`, 'issuePlace', value('issuePlace'), 'text', true), true)}
+          ${portalFieldRow(`${idBase}-issuingAuthority`, 'Issuing Authority', portalTextControl(`${idBase}-issuingAuthority`, 'issuingAuthority', value('issuingAuthority'), 'text', true), true)}
+          ${extraFields}
+          ${fileSection}
           <div class="portal-form-actions">
             <button class="button button-primary" type="submit">Save</button>
           </div>
@@ -2567,6 +2712,44 @@ function bindCurrentPage(session: AuthSession | null): void {
   if (session && getCurrentPath().startsWith('/certificates')) {
     void loadCertificatesFromApi(session);
   }
+
+  // Wire certificate file inputs (upload → AI read → prefill).
+  document.querySelectorAll<HTMLInputElement>('input[data-cert-file]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      const category = input.dataset.certCategory ?? '';
+      const typeSlug = input.dataset.certType ?? '';
+      if (file && category && typeSlug) {
+        void handleCertificateFileUpload(category, typeSlug, file);
+      }
+    });
+  });
+
+  // Drag-and-drop onto a certificate dropzone.
+  document.querySelectorAll<HTMLElement>('[data-cert-dropzone]').forEach((zone) => {
+    const stop = (event: DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    zone.addEventListener('dragover', (event) => {
+      stop(event);
+      zone.classList.add('is-dragover');
+    });
+    zone.addEventListener('dragleave', (event) => {
+      stop(event);
+      zone.classList.remove('is-dragover');
+    });
+    zone.addEventListener('drop', (event) => {
+      stop(event);
+      zone.classList.remove('is-dragover');
+      const file = event.dataTransfer?.files?.[0];
+      const category = zone.dataset.certCategory ?? '';
+      const typeSlug = zone.dataset.certType ?? '';
+      if (file && category && typeSlug) {
+        void handleCertificateFileUpload(category, typeSlug, file);
+      }
+    });
+  });
 }
 
 async function handleSubmit(event: SubmitEvent): Promise<void> {
@@ -3128,13 +3311,25 @@ async function handleCertificateEntrySave(form: HTMLFormElement): Promise<void> 
     return;
   }
 
-  const data = {
+  const key = `${category}:${typeSlug}`;
+  const savedEntry = getCertificateEntry(category, typeSlug);
+  const draftFile = certificateDrafts.get(key)?.file;
+  const attachedFile =
+    draftFile ?? (savedEntry.file && typeof savedEntry.file === 'object' ? savedEntry.file : undefined);
+
+  const data: Record<string, unknown> = {
     number: getFormValue(form, 'number'),
     issuedDate: getFormValue(form, 'issuedDate'),
     expiryDate,
     issuePlace: getFormValue(form, 'issuePlace'),
     issuingAuthority: getFormValue(form, 'issuingAuthority'),
   };
+  for (const field of CERTIFICATE_EXTRA_FIELDS[category] ?? []) {
+    data[field.key] = getFormValue(form, field.key);
+  }
+  if (attachedFile) {
+    data.file = attachedFile;
+  }
 
   portalNotice = { path, message: 'Saving…', kind: 'info' };
   renderApp();
@@ -3155,7 +3350,8 @@ async function handleCertificateEntrySave(form: HTMLFormElement): Promise<void> 
       ...certificatesState,
       entries: { ...certificatesState.entries, [category]: categoryEntries },
     };
-    expandedCertificates.add(`${category}:${typeSlug}`);
+    expandedCertificates.add(key);
+    certificateDrafts.delete(key);
     const label = catalogEntry?.label ?? 'Certificate';
     portalNotice = { path, message: `${label} saved.`, kind: 'success' };
   } catch (error) {
@@ -3163,6 +3359,70 @@ async function handleCertificateEntrySave(form: HTMLFormElement): Promise<void> 
   }
 
   renderApp();
+}
+
+async function handleCertificateFileUpload(
+  category: string,
+  typeSlug: string,
+  file: File,
+): Promise<void> {
+  const session = getSession();
+  if (!session) {
+    startLogin();
+    return;
+  }
+
+  const key = `${category}:${typeSlug}`;
+  const path = `/certificates/${category}`;
+  expandedCertificates.add(key);
+  portalNotice = { path, message: `Reading ${file.name}…`, kind: 'info' };
+  renderApp();
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const result = await apiRequest<{
+      extraction?: Record<string, string | null>;
+      file?: CertificateFileMeta;
+    }>(`/api/customer/certificates/${category}/${typeSlug}/file`, session, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const extraction = result?.extraction ?? {};
+    const draft: CertificateDraft = {
+      extraction,
+      note:
+        typeof extraction.notes === 'string' && extraction.notes
+          ? `AI suggestion: ${extraction.notes} Please review before saving.`
+          : 'Attached. Review the details below, then Save.',
+    };
+    if (result?.file) {
+      draft.file = result.file;
+    }
+    certificateDrafts.set(key, draft);
+    portalNotice = { path, message: `Read ${file.name}. Review the details, then Save.`, kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+
+  renderApp();
+}
+
+async function openCertificateFile(session: AuthSession, category: string, typeSlug: string): Promise<void> {
+  const path = `/certificates/${category}`;
+  try {
+    const result = await apiRequest<{ url?: string }>(
+      `/api/customer/certificates/${category}/${typeSlug}/download-url`,
+      session,
+    );
+    if (result?.url) {
+      window.open(result.url, '_blank', 'noopener');
+    }
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+    renderApp();
+  }
 }
 
 async function handleMainDocumentsSave(form: HTMLFormElement): Promise<void> {
@@ -3488,6 +3748,24 @@ function handleClick(event: MouseEvent): void {
     }
   }
 
+  if (action === 'toggle-all-certificates') {
+    const category = actionElement.getAttribute('data-cert-category');
+    if (category) {
+      const catalog = certificateCatalog(category);
+      const allExpanded =
+        catalog.length > 0 && catalog.every((type) => expandedCertificates.has(`${category}:${type.slug}`));
+      for (const type of catalog) {
+        const key = `${category}:${type.slug}`;
+        if (allExpanded) {
+          expandedCertificates.delete(key);
+        } else {
+          expandedCertificates.add(key);
+        }
+      }
+      renderApp();
+    }
+  }
+
   if (action === 'expand-filled-certificates') {
     const category = actionElement.getAttribute('data-cert-category');
     if (category) {
@@ -3500,15 +3778,12 @@ function handleClick(event: MouseEvent): void {
     }
   }
 
-  if (action === 'collapse-certificates') {
+  if (action === 'view-certificate-file') {
     const category = actionElement.getAttribute('data-cert-category');
-    if (category) {
-      for (const key of [...expandedCertificates]) {
-        if (key.startsWith(`${category}:`)) {
-          expandedCertificates.delete(key);
-        }
-      }
-      renderApp();
+    const typeSlug = actionElement.getAttribute('data-cert-type');
+    const session = getSession();
+    if (session && category && typeSlug) {
+      void openCertificateFile(session, category, typeSlug);
     }
   }
 

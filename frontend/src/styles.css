@@ -2207,6 +2207,91 @@ p {
   border-top: 1px solid var(--line-dark);
 }
 
+.certificate-file {
+  margin-top: 14px;
+}
+
+/* Visually hide the native file input; the dropzone label drives it. */
+.certificate-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.certificate-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 22px 16px;
+  text-align: center;
+  color: var(--paper-dim);
+  background: rgba(6, 22, 32, 0.4);
+  border: 1.5px dashed var(--line-dark);
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.certificate-dropzone:hover,
+.certificate-file.is-dragover .certificate-dropzone {
+  border-color: var(--brass);
+  background: rgba(200, 149, 46, 0.09);
+}
+
+.certificate-file-input:focus-visible + .certificate-dropzone {
+  border-color: var(--brass);
+  box-shadow: 0 0 0 3px rgba(200, 149, 46, 0.22);
+}
+
+.certificate-dropzone-icon {
+  font-size: 1.35rem;
+  color: var(--brass);
+}
+
+.certificate-dropzone-cta {
+  color: var(--paper);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.certificate-dropzone-browse {
+  color: var(--brass);
+  text-decoration: underline;
+}
+
+.certificate-dropzone-hint {
+  font-size: 0.8rem;
+}
+
+.certificate-file-current {
+  margin: 10px 0 0;
+  color: var(--paper-dim);
+  font-size: 0.85rem;
+}
+
+.certificate-file-pending {
+  color: var(--brass);
+}
+
+.link-button {
+  padding: 0;
+  color: var(--brass);
+  font: inherit;
+  text-decoration: underline;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
 .portal-form-actions {
   display: flex;
   gap: 12px;

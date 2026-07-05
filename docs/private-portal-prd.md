@@ -421,8 +421,15 @@ A pragmatic page-by-page sequence once the PRD is approved:
      /api/customer/certificates/{category}/{type}`; loads via `GET .../entries`. Backend: generic
      prefix query on `CertificateDataRepository`, `CertificateCategory` enum, `CertificateEntry`
      service/controller. `.certificate-accordion` styles.
-   - ⏳ Next: file upload + MiniMax extraction on General, then replicate to the other five categories
-     (COC grade for NCOC, Clinic Name for Medical).
+   - ✅ **File upload + MiniMax extraction (done, 2026-07-05)** on General: attach a PDF/image →
+     stored in S3 → `MiniMaxCertificateExtractor` reads it → form prefilled for review → Save links
+     the file → "View file" presigned link. Config via `SEAMARG_MINIMAX_API_KEY` (base URL/model
+     configurable); local no-key path degrades to manual entry. See `docs/certificates-design.md`.
+   - ✅ **Remaining five categories (done, 2026-07-05)**: NCOC, Medical, Tanker/Passenger, Offshore,
+     Flag State — same accordion + form + upload/MiniMax pattern, driven by per-category dummy
+     catalogs. **NCOC** adds a required **COC grade** dropdown; **Medical** adds an optional **Clinic
+     Name**. Backend was already category-generic (`CertificateCategory` enum, NCOC `cocGrade`
+     required). **Step 2 complete.**
 4. Step 3 Sea service records (add/edit/list).
 
 Each page will get its own mini technical spec (fields → data model → API) at build time.

@@ -245,10 +245,30 @@ slug. Unknown category/type → 400. Response shapes reuse the existing `ApiErro
    /api/customer/certificates/{category}/{type}`. Backend: `CertificateCategory` enum, prefix query
    on `CertificateDataRepository`, `CertificateEntryService`/`CertificateEntryController`; tests in
    `EndpointSecurityTests` (round-trip, required, past-expiry, unknown-category). No file upload yet.
-4. **File upload + AI extraction** on that category: `POST .../file` (reuse storage + analyzer,
-   widen extraction fields) → prefill → Save with file link → `download-url`.
-5. **Replicate** the accordion+form+upload to the remaining five categories, adding the
-   category-specific fields (COC grade for NCOC, Clinic Name for Medical).
+4. ✅ **File upload + MiniMax extraction (done, 2026-07-05)** on General — upload-first flow:
+   `POST /api/customer/certificates/{category}/{type}/file` (multipart) stores the scan in S3 and
+   runs `MiniMaxCertificateExtractor` (OpenAI-compatible chat-completions, vision model, base64 image
+   part, strict-JSON), returning suggestions + file metadata; the form prefills for review; Save's
+   PUT includes the nested `file` object; `GET .../download-url` mints a presigned link ("View file").
+   New self-contained types (`CertificateEntryExtraction`, `CertificateFileService`) leave the POC
+   extractor/`CertificateExtraction` untouched. MiniMax never throws — any failure (or non-image, or
+   no key) yields empty suggestions so the upload still succeeds and the user types manually. Config:
+   `SEAMARG_MINIMAX_API_KEY` (or `MINIMAX_API_KEY`), `SEAMARG_MINIMAX_BASE_URL`
+   (default `https://api.minimax.io/v1`), `SEAMARG_MINIMAX_MODEL` (default `MiniMax-VL-01`) — **verify
+   base URL + vision model id against current MiniMax docs when the key is set in dev**. `DocumentStorage`
+   gained a `(bucket, key, filename)` presign overload. Tests: unauth, storage-unavailable → 503,
+   missing-file download → 400.
+5. ✅ **Remaining five categories (done, 2026-07-05)** — NCOC, Medical, Tanker/Passenger, Offshore,
+   Flag State reuse the same accordion/form/upload code via per-category dummy catalogs
+   (`CERTIFICATE_CATALOGS`) and a `CERTIFICATE_EXTRA_FIELDS` map: **NCOC** → required COC-grade
+   dropdown (`COC_GRADE_OPTIONS`), **Medical** → optional Clinic Name. The route dispatch and save
+   handler are category-generic; no backend change was needed (the enum + NCOC required validation
+   already existed). **Step 2 (Certificates) is complete.**
+6. ✅ **Accordion/upload UI polish (done, 2026-07-05)** — themed drag-and-drop dropzone (hidden native
+   input + styled `.certificate-dropzone`, dragover highlight) replacing the raw "Choose file"; toolbar
+   is a single **Expand all ⇄ Collapse all** toggle plus **Expand filled** (`button-secondary`). Catalogs stay
+   the 6-item dummy lists for the POC (swap the `*_CERTIFICATES` arrays for the real catalogs later —
+   pure data, no code change).
 
 Each step: typecheck + backend tests + in-browser verification (stubbed API), same as Step 1.
 

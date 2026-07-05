@@ -66,6 +66,25 @@ class S3DocumentStorage implements DocumentStorage {
 		return s3Presigner.presignGetObject(presignRequest).url();
 	}
 
+	@Override
+	public URL createDownloadUrl(String bucketName, String objectKey, String filename) {
+		var disposition = ContentDisposition.inline()
+			.filename(sanitizeFilename(filename))
+			.build()
+			.toString();
+		var getObjectRequest = GetObjectRequest.builder()
+			.bucket(bucketName)
+			.key(objectKey)
+			.responseContentDisposition(disposition)
+			.build();
+		var presignRequest = GetObjectPresignRequest.builder()
+			.signatureDuration(settings.downloadUrlTtl())
+			.getObjectRequest(getObjectRequest)
+			.build();
+
+		return s3Presigner.presignGetObject(presignRequest).url();
+	}
+
 	private static String sanitizePathSegment(String value) {
 		return value.replaceAll("[^A-Za-z0-9._=-]", "_");
 	}

@@ -26,6 +26,11 @@ enum CertificateCategory {
 		return slug;
 	}
 
+	/** DynamoDB sort key for one entry of this category: {@code CERT#<NAME>#<TYPE_SLUG>}. */
+	String sortKey(String typeSlug) {
+		return "CERT#" + name() + "#" + typeSlug;
+	}
+
 	static Optional<CertificateCategory> fromSlug(String slug) {
 		if (slug == null) {
 			return Optional.empty();

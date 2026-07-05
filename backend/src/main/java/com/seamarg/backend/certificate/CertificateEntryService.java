@@ -66,7 +66,7 @@ class CertificateEntryService {
 		validateRequired(category, data);
 		validateExpiryNotPast(data);
 
-		repository.savePayload(userId, sortKey(category, typeSlug), writePayload(data));
+		repository.savePayload(userId, category.sortKey(typeSlug), writePayload(data));
 		return data;
 	}
 
@@ -95,10 +95,6 @@ class CertificateEntryService {
 		if (expiry.isBefore(LocalDate.now())) {
 			throw new IllegalArgumentException("Expiry date cannot be in the past; expired certificates are not accepted.");
 		}
-	}
-
-	private static String sortKey(CertificateCategory category, String typeSlug) {
-		return PREFIX + category.name() + "#" + typeSlug;
 	}
 
 	private Map<String, Object> parsePayload(String payloadJson) {

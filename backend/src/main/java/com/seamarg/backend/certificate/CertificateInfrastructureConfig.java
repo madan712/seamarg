@@ -30,7 +30,10 @@ class CertificateInfrastructureConfig {
 			@Value("${seamarg.certificates.max-upload-bytes}") long maxUploadBytes,
 			@Value("${seamarg.certificates.download-url-ttl-seconds}") long downloadUrlTtlSeconds,
 			@Value("${seamarg.ai.openai.api-key:}") String openAiApiKey,
-			@Value("${seamarg.ai.openai.model}") String openAiModel) {
+			@Value("${seamarg.ai.openai.model}") String openAiModel,
+			@Value("${seamarg.ai.minimax.api-key:}") String minimaxApiKey,
+			@Value("${seamarg.ai.minimax.base-url}") String minimaxBaseUrl,
+			@Value("${seamarg.ai.minimax.model}") String minimaxModel) {
 		return new CertificateSettings(
 			awsRegion,
 			documentBucketName,
@@ -38,7 +41,10 @@ class CertificateInfrastructureConfig {
 			maxUploadBytes,
 			Duration.ofSeconds(downloadUrlTtlSeconds),
 			openAiApiKey,
-			openAiModel);
+			openAiModel,
+			minimaxApiKey,
+			minimaxBaseUrl,
+			minimaxModel);
 	}
 
 	@Bean

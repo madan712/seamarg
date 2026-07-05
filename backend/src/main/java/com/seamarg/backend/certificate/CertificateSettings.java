@@ -9,5 +9,8 @@ public record CertificateSettings(
 		long maxUploadBytes,
 		Duration downloadUrlTtl,
 		String openAiApiKey,
-		String openAiModel) {
+		String openAiModel,
+		String minimaxApiKey,
+		String minimaxBaseUrl,
+		String minimaxModel) {
 }
