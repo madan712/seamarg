@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Seamarg",
+    "slug": "seamarg-mobile",
+    "scheme": "seamarg",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0b1f33"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.seamarg.mobile"
+    },
+    "android": {
+      "package": "com.seamarg.mobile",
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Seamarg uses the camera so you can scan and upload your certificates."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Seamarg accesses your photos so you can upload certificate scans."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

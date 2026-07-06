@@ -1,0 +1,22 @@
+# Expo / React Native
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native builds
+ios/
+android/
+*.orig.*
+
+# Environment (secrets / per-machine config)
+.env
+.env.local
+.env.*.local
+
+# Dependencies (hoisted to repo root, but keep any local installs out of git)
+node_modules/
+
+# Misc
+*.log
+.DS_Store

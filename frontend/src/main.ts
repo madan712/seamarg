@@ -1274,9 +1274,16 @@ async function adminApiRequest<T>(path: string, init: RequestInit = {}): Promise
     throw new Error('Incorrect admin password.');
   }
   if (response.status === 503) {
-    throw new Error(
-      'Admin access is not configured on the backend. Set SEAMARG_ADMIN_PASSWORD and restart the service.',
-    );
+    // A 503 can mean either the admin password is unset on the backend, or a
+    // downstream dependency (DynamoDB/S3) failed. Surface the backend's actual
+    // message so data-store failures aren't misreported as an auth problem.
+    const message = await readApiError(response);
+    if (/not configured/i.test(message)) {
+      throw new Error(
+        'Admin access is not configured on the backend. Set SEAMARG_ADMIN_PASSWORD and restart the service.',
+      );
+    }
+    throw new Error(message);
   }
   if (!response.ok) {
     throw new Error(await readApiError(response));

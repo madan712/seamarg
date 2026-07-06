@@ -5,7 +5,8 @@
   "description": "Root workspace for the seamarg backend, frontend, lambda, and infrastructure projects.",
   "workspaces": [
     "frontend",
-    "lambda"
+    "lambda",
+    "mobile"
   ],
   "scripts": {
     "backend:bootRun": "./gradlew :backend:bootRun",
@@ -15,6 +16,7 @@
     "frontend:dev": "npm run dev -w frontend",
     "frontend:build": "npm run build -w frontend",
     "lambda:build": "npm run build -w lambda",
+    "mobile:start": "npm run start -w mobile",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
