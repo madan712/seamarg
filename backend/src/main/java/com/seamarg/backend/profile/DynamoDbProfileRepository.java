@@ -4,6 +4,7 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -46,6 +47,35 @@ class DynamoDbProfileRepository implements ProfileRepository {
 					string(item, "payload"),
 					instant(item, "updatedAt"))));
 		}
+		return records;
+	}
+
+	@Override
+	public List<ProfileSectionRecord> findAll() {
+		var records = new ArrayList<ProfileSectionRecord>();
+		Map<String, AttributeValue> lastKey = null;
+
+		do {
+			var request = ScanRequest.builder()
+				.tableName(settings.appDataTableName())
+				.filterExpression("entityType = :entityType")
+				.expressionAttributeValues(Map.of(":entityType", AttributeValue.fromS(ENTITY_TYPE)))
+				.exclusiveStartKey(lastKey == null || lastKey.isEmpty() ? null : lastKey)
+				.build();
+			var response = dynamoDbClient.scan(request);
+
+			for (var item : response.items()) {
+				ProfileSection.fromSortKey(string(item, "sk"))
+					.ifPresent(section -> records.add(new ProfileSectionRecord(
+						string(item, "userId"),
+						section,
+						string(item, "payload"),
+						instant(item, "updatedAt"))));
+			}
+
+			lastKey = response.lastEvaluatedKey();
+		} while (lastKey != null && !lastKey.isEmpty());
+
 		return records;
 	}
 

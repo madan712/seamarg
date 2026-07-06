@@ -37,6 +37,23 @@ class InMemoryCertificateDataRepository implements CertificateDataRepository {
 		return results;
 	}
 
+	@Override
+	public List<UserScopedData> findAllByPrefix(String sortKeyPrefix) {
+		var results = new ArrayList<UserScopedData>();
+		for (var entry : store.entrySet()) {
+			var separator = entry.getKey().indexOf('|');
+			if (separator < 0) {
+				continue;
+			}
+			var userId = entry.getKey().substring(0, separator);
+			var sortKey = entry.getKey().substring(separator + 1);
+			if (sortKey.startsWith(sortKeyPrefix)) {
+				results.add(new UserScopedData(userId, sortKey, entry.getValue(), null));
+			}
+		}
+		return results;
+	}
+
 	private static String key(String userId, String sortKey) {
 		return userId + "|" + sortKey;
 	}

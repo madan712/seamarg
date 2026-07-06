@@ -24,6 +24,11 @@ class InMemoryProfileRepository implements ProfileRepository {
 		return record;
 	}
 
+	@Override
+	public List<ProfileSectionRecord> findAll() {
+		return List.copyOf(records.values());
+	}
+
 	private static String key(String userId, ProfileSection section) {
 		return userId + "::" + section.name();
 	}

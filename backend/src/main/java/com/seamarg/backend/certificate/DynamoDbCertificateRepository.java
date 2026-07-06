@@ -4,9 +4,11 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -56,6 +58,34 @@ class DynamoDbCertificateRepository implements CertificateRepository {
 			.stream()
 			.filter(certificate -> certificate.certificateId().equals(certificateId))
 			.findFirst();
+	}
+
+	@Override
+	public List<CertificateRecord> findAll() {
+		var records = new ArrayList<CertificateRecord>();
+		Map<String, AttributeValue> lastKey = null;
+
+		do {
+			var request = ScanRequest.builder()
+				.tableName(settings.appDataTableName())
+				.filterExpression("entityType = :entityType")
+				.expressionAttributeValues(Map.of(":entityType", AttributeValue.fromS(ENTITY_TYPE)))
+				.exclusiveStartKey(lastKey == null || lastKey.isEmpty() ? null : lastKey)
+				.build();
+			var response = dynamoDbClient.scan(request);
+
+			for (var item : response.items()) {
+				if (string(item, "certificateId") != null) {
+					records.add(fromItem(item));
+				}
+			}
+
+			lastKey = response.lastEvaluatedKey();
+		} while (lastKey != null && !lastKey.isEmpty());
+
+		records.sort(Comparator.comparing(CertificateRecord::uploadedAt,
+			Comparator.nullsLast(Comparator.naturalOrder())).reversed());
+		return records;
 	}
 
 	private Map<String, AttributeValue> toItem(CertificateRecord certificate) {

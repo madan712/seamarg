@@ -5,6 +5,7 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -83,6 +84,41 @@ class DynamoDbCertificateDataRepository implements CertificateDataRepository {
 				results.add(new StoredCertificateData(sk.s(), payload == null ? null : payload.s()));
 			}
 		}
+		return results;
+	}
+
+	@Override
+	public List<UserScopedData> findAllByPrefix(String sortKeyPrefix) {
+		var results = new ArrayList<UserScopedData>();
+		Map<String, AttributeValue> lastKey = null;
+
+		do {
+			var request = ScanRequest.builder()
+				.tableName(settings.appDataTableName())
+				.filterExpression("begins_with(sk, :sk)")
+				.expressionAttributeValues(Map.of(":sk", AttributeValue.fromS(sortKeyPrefix)))
+				.exclusiveStartKey(lastKey == null || lastKey.isEmpty() ? null : lastKey)
+				.build();
+			var response = dynamoDbClient.scan(request);
+
+			for (var item : response.items()) {
+				var sk = item.get("sk");
+				if (sk == null) {
+					continue;
+				}
+				var userId = item.get("userId");
+				var payload = item.get("payload");
+				var updatedAt = item.get("updatedAt");
+				results.add(new UserScopedData(
+					userId == null ? null : userId.s(),
+					sk.s(),
+					payload == null ? null : payload.s(),
+					updatedAt == null ? null : Instant.parse(updatedAt.s())));
+			}
+
+			lastKey = response.lastEvaluatedKey();
+		} while (lastKey != null && !lastKey.isEmpty());
+
 		return results;
 	}
 

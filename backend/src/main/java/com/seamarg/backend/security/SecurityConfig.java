@@ -64,7 +64,8 @@ public class SecurityConfig {
 			.filter(StringUtils::hasText)
 			.toList());
 		configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "OPTIONS"));
-		configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
+		configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type",
+			AdminPasswordAuthenticationFilter.ADMIN_PASSWORD_HEADER));
 		configuration.setExposedHeaders(Arrays.asList("Location"));
 		configuration.setMaxAge(3600L);
 

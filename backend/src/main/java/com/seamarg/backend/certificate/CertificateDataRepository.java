@@ -1,5 +1,6 @@
 package com.seamarg.backend.certificate;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +19,16 @@ interface CertificateDataRepository {
 	/** Returns all items for a user whose sort key begins with the given prefix. */
 	List<StoredCertificateData> findByUserIdAndPrefix(String userId, String sortKeyPrefix);
 
+	/**
+	 * Returns items across all users whose sort key begins with the given prefix.
+	 * Used by the admin dashboard to surface files attached to certificate
+	 * entries; not on any customer hot path.
+	 */
+	List<UserScopedData> findAllByPrefix(String sortKeyPrefix);
+
 	record StoredCertificateData(String sortKey, String payloadJson) {
+	}
+
+	record UserScopedData(String userId, String sortKey, String payloadJson, Instant updatedAt) {
 	}
 }

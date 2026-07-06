@@ -51,6 +51,7 @@ const appRoot = app;
 const storageKeys = {
   session: 'seamarg.auth.session',
   bannerDismissed: 'seamarg.portal.bannerDismissed',
+  admin: 'seamarg.admin.password',
 };
 
 const runtimeConfig = (
@@ -1131,9 +1132,729 @@ function normalizeError(error: unknown): Error {
   return new Error('Cognito request failed.');
 }
 
+// ---------------------------------------------------------------------------
+// Admin console (/admin)
+//
+// A self-contained, staff-only dashboard that is entirely separate from the
+// Cognito seafarer portal. It authenticates with the backend admin password
+// (sent as the X-Admin-Password header on /api/admin/* requests) and lists
+// registered users, their profile, their uploaded files, and activity.
+//
+// The admin password is kept in sessionStorage so a page refresh keeps the
+// admin signed in. It is scoped to the tab session (closing the tab clears it)
+// and re-validated against the backend on load — a pragmatic trade-off for a
+// privileged tool.
+// ---------------------------------------------------------------------------
+type AdminStats = {
+  totalUsers: number;
+  totalFiles: number;
+  totalStorageBytes: number;
+  activeLast7Days: number;
+  newFilesLast7Days: number;
+};
+
+type AdminUserSummary = {
+  userId: string;
+  name: string | null;
+  email: string | null;
+  position: string | null;
+  citizenship: string | null;
+  profileSections: number;
+  fileCount: number;
+  storageBytes: number;
+  firstSeen: string | null;
+  lastActivity: string | null;
+};
+
+type AdminUsersPayload = {
+  generatedAt: string;
+  stats: AdminStats;
+  users: AdminUserSummary[];
+};
+
+type AdminFileSummary = {
+  certificateId: string;
+  originalFilename: string | null;
+  contentType: string | null;
+  sizeBytes: number;
+  uploadedAt: string | null;
+  updatedAt: string | null;
+  processingStatus: string | null;
+  documentName: string | null;
+  documentCategory: string | null;
+  rank: string | null;
+  expiryDate: string | null;
+  issuer: string | null;
+  certificateNumber: string | null;
+  confidence: number | null;
+  extractionSource: string | null;
+  extractionNotes: string | null;
+};
+
+type AdminUserDetail = {
+  userId: string;
+  name: string | null;
+  email: string | null;
+  firstSeen: string | null;
+  lastActivity: string | null;
+  profile: Record<string, Record<string, unknown>>;
+  files: AdminFileSummary[];
+};
+
+type AdminState = {
+  password: string | null;
+  authed: boolean;
+  restoring: boolean;
+  loading: boolean;
+  error: string;
+  data: AdminUsersPayload | null;
+  search: string;
+  selectedUserId: string | null;
+  detail: AdminUserDetail | null;
+  detailLoading: boolean;
+  detailError: string;
+  busyFileId: string | null;
+};
+
+const storedAdminPassword = window.sessionStorage.getItem(storageKeys.admin);
+
+let adminState: AdminState = {
+  password: storedAdminPassword,
+  authed: false,
+  restoring: Boolean(storedAdminPassword),
+  loading: false,
+  error: '',
+  data: null,
+  search: '',
+  selectedUserId: null,
+  detail: null,
+  detailLoading: false,
+  detailError: '',
+  busyFileId: null,
+};
+
+const PROFILE_SECTION_TITLES: Record<string, string> = {
+  main: 'Main information',
+  contact: 'Contact details',
+  passport: 'Passport & Seaman book',
+  address: 'Address & Airport',
+  languages: 'Languages',
+  skills: 'Professional skills',
+  visas: 'Visas',
+  relatives: 'Relatives & next of kin',
+  misc: 'Notes & miscellaneous',
+};
+
+const PROFILE_SECTION_ORDER = [
+  'main',
+  'contact',
+  'passport',
+  'address',
+  'languages',
+  'skills',
+  'visas',
+  'relatives',
+  'misc',
+];
+
+async function adminApiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (!config.apiBaseUrl) {
+    throw new Error('Backend API URL is not configured for this deployment.');
+  }
+  if (!adminState.password) {
+    throw new Error('Admin session expired. Sign in again.');
+  }
+
+  const headers = new Headers(init.headers);
+  headers.set('X-Admin-Password', adminState.password);
+
+  const response = await fetch(`${config.apiBaseUrl}${path}`, { ...init, headers });
+
+  if (response.status === 401) {
+    throw new Error('Incorrect admin password.');
+  }
+  if (response.status === 503) {
+    throw new Error(
+      'Admin access is not configured on the backend. Set SEAMARG_ADMIN_PASSWORD and restart the service.',
+    );
+  }
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as T;
+}
+
+function adminSignOut(): void {
+  window.sessionStorage.removeItem(storageKeys.admin);
+  adminState = {
+    password: null,
+    authed: false,
+    restoring: false,
+    loading: false,
+    error: '',
+    data: null,
+    search: '',
+    selectedUserId: null,
+    detail: null,
+    detailLoading: false,
+    detailError: '',
+    busyFileId: null,
+  };
+  renderApp();
+}
+
+// Re-validate a password restored from sessionStorage on page load. Runs once
+// per load (guarded by adminState.restoring in the /admin route), so a failed
+// or stale password quietly drops back to the sign-in screen.
+async function bootstrapAdminSession(): Promise<void> {
+  adminState = { ...adminState, loading: true };
+  renderApp();
+
+  try {
+    const payload = await adminApiRequest<AdminUsersPayload>('/api/admin/users');
+    adminState = { ...adminState, authed: true, restoring: false, loading: false, data: payload, error: '' };
+  } catch {
+    window.sessionStorage.removeItem(storageKeys.admin);
+    adminState = { ...adminState, password: null, authed: false, restoring: false, loading: false, error: '' };
+  }
+
+  renderApp();
+}
+
+async function handleAdminLogin(form: HTMLFormElement): Promise<void> {
+  const data = new FormData(form);
+  const username = String(data.get('username') ?? '').trim();
+  const password = String(data.get('password') ?? '');
+
+  if (!username || !password) {
+    adminState = { ...adminState, error: 'Enter both the admin username and password.' };
+    renderApp();
+    return;
+  }
+
+  adminState = { ...adminState, password, loading: true, error: '' };
+  renderApp();
+
+  try {
+    const payload = await adminApiRequest<AdminUsersPayload>('/api/admin/users');
+    window.sessionStorage.setItem(storageKeys.admin, password);
+    adminState = { ...adminState, authed: true, loading: false, data: payload, error: '' };
+  } catch (error) {
+    window.sessionStorage.removeItem(storageKeys.admin);
+    adminState = {
+      ...adminState,
+      password: null,
+      authed: false,
+      loading: false,
+      error: normalizeError(error).message,
+    };
+  }
+
+  renderApp();
+}
+
+async function refreshAdminUsers(): Promise<void> {
+  adminState = { ...adminState, loading: true, error: '' };
+  renderApp();
+
+  try {
+    const payload = await adminApiRequest<AdminUsersPayload>('/api/admin/users');
+    adminState = { ...adminState, loading: false, data: payload, error: '' };
+  } catch (error) {
+    adminState = { ...adminState, loading: false, error: normalizeError(error).message };
+  }
+
+  renderApp();
+}
+
+async function selectAdminUser(userId: string): Promise<void> {
+  adminState = {
+    ...adminState,
+    selectedUserId: userId,
+    detail: null,
+    detailLoading: true,
+    detailError: '',
+  };
+  renderApp();
+
+  try {
+    const detail = await adminApiRequest<AdminUserDetail>(
+      `/api/admin/users/${encodeURIComponent(userId)}`,
+    );
+    adminState = { ...adminState, detail, detailLoading: false, detailError: '' };
+  } catch (error) {
+    adminState = { ...adminState, detailLoading: false, detailError: normalizeError(error).message };
+  }
+
+  renderApp();
+}
+
+async function openAdminFile(userId: string, certificateId: string, download: boolean): Promise<void> {
+  adminState = { ...adminState, busyFileId: certificateId, detailError: '' };
+  renderApp();
+
+  try {
+    const mode = download ? 'download' : 'view';
+    const link = await adminApiRequest<{ url: string; mode: string }>(
+      `/api/admin/users/${encodeURIComponent(userId)}/files/${encodeURIComponent(certificateId)}/link?mode=${mode}`,
+    );
+    window.open(link.url, '_blank', 'noopener');
+    adminState = { ...adminState, busyFileId: null };
+  } catch (error) {
+    adminState = { ...adminState, busyFileId: null, detailError: normalizeError(error).message };
+  }
+
+  renderApp();
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0 B';
+  }
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** exponent;
+  return `${value >= 10 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${units[exponent]}`;
+}
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) {
+    return '—';
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) {
+    return '—';
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return escapeHtml(iso);
+  }
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function humanizeKey(key: string): string {
+  const spaced = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : key;
+}
+
+function formatFieldValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') {
+    return '—';
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No';
+  }
+  if (typeof value === 'number' || typeof value === 'string') {
+    return escapeHtml(String(value));
+  }
+  return escapeHtml(JSON.stringify(value));
+}
+
+function renderAdminApp(): string {
+  if (adminState.restoring) {
+    return renderAdminRestoring();
+  }
+  if (!adminState.authed) {
+    return renderAdminLogin();
+  }
+  return renderAdminDashboard();
+}
+
+function renderAdminRestoring(): string {
+  return `
+    <div class="admin-auth">
+      <div class="admin-auth-card admin-auth-restoring">
+        <div class="admin-auth-brand">
+          <span class="admin-brand-mark">SM</span>
+          <div>
+            <strong>SeaMarg</strong>
+            <small>Admin console</small>
+          </div>
+        </div>
+        <p class="admin-auth-intro">Restoring your session…</p>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminLogin(): string {
+  const error = adminState.error
+    ? `<p class="admin-alert admin-alert-error">${escapeHtml(adminState.error)}</p>`
+    : '';
+  const busy = adminState.loading;
+
+  return `
+    <div class="admin-auth">
+      <form class="admin-auth-card" id="admin-login-form" novalidate>
+        <div class="admin-auth-brand">
+          <span class="admin-brand-mark">SM</span>
+          <div>
+            <strong>SeaMarg</strong>
+            <small>Admin console</small>
+          </div>
+        </div>
+        <h1>Restricted access</h1>
+        <p class="admin-auth-intro">Sign in with your administrator credentials to manage users and documents.</p>
+        ${error}
+        <label class="admin-field">
+          <span>Username</span>
+          <input name="username" type="text" autocomplete="username" value="admin" required />
+        </label>
+        <label class="admin-field">
+          <span>Password</span>
+          <input name="password" type="password" autocomplete="current-password" required autofocus />
+        </label>
+        <button class="admin-button admin-button-primary" type="submit" ${busy ? 'disabled' : ''}>
+          ${busy ? 'Signing in…' : 'Sign in'}
+        </button>
+        <a class="admin-auth-back" href="#/">← Back to SeaMarg</a>
+      </form>
+    </div>
+  `;
+}
+
+function renderAdminDashboard(): string {
+  const stats = adminState.data?.stats;
+  const generatedAt = adminState.data?.generatedAt ?? null;
+
+  const statCards = stats
+    ? [
+        renderStatCard('Registered users', String(stats.totalUsers), 'with a profile or upload'),
+        renderStatCard('Uploaded files', String(stats.totalFiles), formatBytes(stats.totalStorageBytes) + ' stored'),
+        renderStatCard('Active (7 days)', String(stats.activeLast7Days), 'users with recent activity'),
+        renderStatCard('New files (7 days)', String(stats.newFilesLast7Days), 'uploaded this week'),
+      ].join('')
+    : '';
+
+  const globalError = adminState.error
+    ? `<p class="admin-alert admin-alert-error">${escapeHtml(adminState.error)}
+         <button type="button" class="admin-link" data-action="admin-refresh">Retry</button></p>`
+    : '';
+
+  return `
+    <div class="admin-shell">
+      <header class="admin-topbar">
+        <div class="admin-topbar-brand">
+          <span class="admin-brand-mark">SM</span>
+          <div>
+            <strong>SeaMarg</strong>
+            <small>Admin console</small>
+          </div>
+        </div>
+        <div class="admin-topbar-actions">
+          <span class="admin-generated">${generatedAt ? 'Updated ' + formatDateTime(generatedAt) : ''}</span>
+          <button type="button" class="admin-button admin-button-ghost" data-action="admin-refresh" ${
+            adminState.loading ? 'disabled' : ''
+          }>${adminState.loading ? 'Refreshing…' : 'Refresh'}</button>
+          <button type="button" class="admin-button admin-button-ghost" data-action="admin-signout">Sign out</button>
+        </div>
+      </header>
+
+      <section class="admin-stats">${statCards}</section>
+      ${globalError}
+
+      <div class="admin-body">
+        <section class="admin-panel admin-users-panel">
+          <div class="admin-panel-head">
+            <h2>Registered users</h2>
+            <input
+              class="admin-search"
+              id="admin-user-search"
+              type="search"
+              placeholder="Search name, email, position…"
+              value="${escapeHtml(adminState.search)}"
+              autocomplete="off"
+            />
+          </div>
+          ${renderAdminUsersTable()}
+        </section>
+        <section class="admin-panel admin-detail-panel">
+          ${renderAdminDetail()}
+        </section>
+      </div>
+    </div>
+  `;
+}
+
+function renderStatCard(label: string, value: string, hint: string): string {
+  return `
+    <div class="admin-stat-card">
+      <span class="admin-stat-value">${escapeHtml(value)}</span>
+      <span class="admin-stat-label">${escapeHtml(label)}</span>
+      <span class="admin-stat-hint">${escapeHtml(hint)}</span>
+    </div>
+  `;
+}
+
+function renderAdminUsersTable(): string {
+  const users = adminState.data?.users ?? [];
+
+  if (adminState.loading && users.length === 0) {
+    return `<p class="admin-empty">Loading users…</p>`;
+  }
+  if (users.length === 0) {
+    return `<p class="admin-empty">No registered users yet.</p>`;
+  }
+
+  const rows = users
+    .map((user) => {
+      const selected = user.userId === adminState.selectedUserId ? ' is-selected' : '';
+      const haystack = [user.name, user.email, user.position, user.citizenship, user.userId]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return `
+        <tr class="admin-user-row${selected}" data-action="admin-select-user" data-user-id="${escapeHtml(
+          user.userId,
+        )}" data-search="${escapeHtml(haystack)}">
+          <td>
+            <span class="admin-user-name">${escapeHtml(user.name ?? 'Unnamed user')}</span>
+            <span class="admin-user-sub">${escapeHtml(user.email ?? user.userId)}</span>
+          </td>
+          <td>${escapeHtml(user.position ?? '—')}</td>
+          <td class="admin-num">${user.profileSections}</td>
+          <td class="admin-num">${user.fileCount}</td>
+          <td class="admin-nowrap">${formatDateTime(user.lastActivity)}</td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  return `
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Position</th>
+            <th class="admin-num">Sections</th>
+            <th class="admin-num">Files</th>
+            <th>Last activity</th>
+          </tr>
+        </thead>
+        <tbody id="admin-user-rows">${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderAdminDetail(): string {
+  if (!adminState.selectedUserId) {
+    return `<div class="admin-detail-empty">
+      <p>Select a user to view their profile, uploaded files, and activity.</p>
+    </div>`;
+  }
+
+  if (adminState.detailLoading) {
+    return `<p class="admin-empty">Loading user…</p>`;
+  }
+
+  if (adminState.detailError) {
+    return `<p class="admin-alert admin-alert-error">${escapeHtml(adminState.detailError)}
+      <button type="button" class="admin-link" data-action="admin-select-user" data-user-id="${escapeHtml(
+        adminState.selectedUserId,
+      )}">Retry</button></p>`;
+  }
+
+  const detail = adminState.detail;
+  if (!detail) {
+    return `<p class="admin-empty">No data.</p>`;
+  }
+
+  return `
+    <div class="admin-detail-head">
+      <div>
+        <h2>${escapeHtml(detail.name ?? 'Unnamed user')}</h2>
+        <p class="admin-detail-meta">${escapeHtml(detail.email ?? '—')} · <span class="admin-mono">${escapeHtml(
+          detail.userId,
+        )}</span></p>
+      </div>
+      <button type="button" class="admin-button admin-button-ghost admin-detail-close" data-action="admin-close-detail">Close</button>
+    </div>
+    <div class="admin-detail-facts">
+      <span><small>First seen</small>${formatDateTime(detail.firstSeen)}</span>
+      <span><small>Last activity</small>${formatDateTime(detail.lastActivity)}</span>
+      <span><small>Files</small>${detail.files.length}</span>
+    </div>
+    ${renderAdminFiles(detail)}
+    ${renderAdminProfile(detail)}
+  `;
+}
+
+function renderAdminFiles(detail: AdminUserDetail): string {
+  if (detail.files.length === 0) {
+    return `
+      <div class="admin-detail-section">
+        <h3>Uploaded files</h3>
+        <p class="admin-empty">No files uploaded.</p>
+      </div>
+    `;
+  }
+
+  const items = detail.files
+    .map((file) => {
+      const busy = adminState.busyFileId === file.certificateId;
+      const meta = [
+        file.documentCategory ? humanizeKey(file.documentCategory) : null,
+        file.contentType,
+        formatBytes(file.sizeBytes),
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      const extracted = [
+        file.documentName ? `<span><small>Document</small>${escapeHtml(file.documentName)}</span>` : '',
+        file.issuer ? `<span><small>Issuer</small>${escapeHtml(file.issuer)}</span>` : '',
+        file.certificateNumber
+          ? `<span><small>Number</small>${escapeHtml(file.certificateNumber)}</span>`
+          : '',
+        file.expiryDate ? `<span><small>Expiry</small>${formatDate(file.expiryDate)}</span>` : '',
+      ]
+        .filter(Boolean)
+        .join('');
+
+      return `
+        <li class="admin-file">
+          <div class="admin-file-main">
+            <span class="admin-file-name">${escapeHtml(file.originalFilename ?? 'Document')}</span>
+            <span class="admin-file-meta">${escapeHtml(meta)}</span>
+            ${extracted ? `<div class="admin-file-extracted">${extracted}</div>` : ''}
+          </div>
+          <div class="admin-file-side">
+            ${renderStatusBadge(file.processingStatus)}
+            <span class="admin-file-date">${formatDateTime(file.uploadedAt)}</span>
+            <div class="admin-file-actions">
+              <button type="button" class="admin-button admin-button-small" data-action="admin-view-file"
+                data-user-id="${escapeHtml(detail.userId)}" data-cert-id="${escapeHtml(file.certificateId)}" ${
+                  busy ? 'disabled' : ''
+                }>View</button>
+              <button type="button" class="admin-button admin-button-small admin-button-ghost" data-action="admin-download-file"
+                data-user-id="${escapeHtml(detail.userId)}" data-cert-id="${escapeHtml(file.certificateId)}" ${
+                  busy ? 'disabled' : ''
+                }>Download</button>
+            </div>
+          </div>
+        </li>
+      `;
+    })
+    .join('');
+
+  return `
+    <div class="admin-detail-section">
+      <h3>Uploaded files <span class="admin-count">${detail.files.length}</span></h3>
+      <ul class="admin-file-list">${items}</ul>
+    </div>
+  `;
+}
+
+function renderStatusBadge(status: string | null): string {
+  if (!status) {
+    return '';
+  }
+  const normalized = status.toLowerCase();
+  const tone =
+    normalized === 'analyzed'
+      ? 'ok'
+      : normalized === 'analyzing'
+        ? 'pending'
+        : normalized === 'review_required'
+          ? 'warn'
+          : 'neutral';
+  return `<span class="admin-badge admin-badge-${tone}">${escapeHtml(humanizeKey(status))}</span>`;
+}
+
+function renderAdminProfile(detail: AdminUserDetail): string {
+  const slugs = Object.keys(detail.profile);
+  if (slugs.length === 0) {
+    return `
+      <div class="admin-detail-section">
+        <h3>Profile</h3>
+        <p class="admin-empty">No profile sections saved.</p>
+      </div>
+    `;
+  }
+
+  const ordered = [
+    ...PROFILE_SECTION_ORDER.filter((slug) => slugs.includes(slug)),
+    ...slugs.filter((slug) => !PROFILE_SECTION_ORDER.includes(slug)),
+  ];
+
+  const sections = ordered
+    .map((slug) => {
+      const values = detail.profile[slug] ?? {};
+      const rows = Object.entries(values)
+        .map(
+          ([key, value]) => `
+            <div class="admin-kv">
+              <dt>${escapeHtml(humanizeKey(key))}</dt>
+              <dd>${formatFieldValue(value)}</dd>
+            </div>
+          `,
+        )
+        .join('');
+      const title = PROFILE_SECTION_TITLES[slug] ?? humanizeKey(slug);
+      return `
+        <div class="admin-profile-section">
+          <h4>${escapeHtml(title)}</h4>
+          ${rows ? `<dl class="admin-kv-grid">${rows}</dl>` : '<p class="admin-empty">Empty.</p>'}
+        </div>
+      `;
+    })
+    .join('');
+
+  return `
+    <div class="admin-detail-section">
+      <h3>Profile <span class="admin-count">${slugs.length}</span></h3>
+      ${sections}
+    </div>
+  `;
+}
+
+function bindAdminPage(): void {
+  const searchInput = document.querySelector<HTMLInputElement>('#admin-user-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value.trim().toLowerCase();
+      adminState.search = searchInput.value;
+      document.querySelectorAll<HTMLElement>('#admin-user-rows .admin-user-row').forEach((row) => {
+        const haystack = row.dataset.search ?? '';
+        row.hidden = Boolean(query) && !haystack.includes(query);
+      });
+    });
+  }
+}
+
 function renderApp(): void {
   const session = getSession();
   const path = getCurrentPath();
+
+  // Admin console: standalone, staff-only, outside the Cognito portal shell.
+  if (path === '/admin' || path.startsWith('/admin/')) {
+    // Re-validate a password restored from sessionStorage exactly once per load.
+    if (adminState.restoring && !adminState.loading) {
+      void bootstrapAdminSession();
+    }
+    appRoot.innerHTML = renderAdminApp();
+    bindAdminPage();
+    return;
+  }
 
   if (path === '/signin' && session) {
     setPath(DEFAULT_PRIVATE_PATH);
@@ -2765,6 +3486,12 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
     return;
   }
 
+  if (form.id === 'admin-login-form') {
+    event.preventDefault();
+    await handleAdminLogin(form);
+    return;
+  }
+
   if (form.id === 'profile-main-information-form') {
     event.preventDefault();
     await handleMainInformationSave(form);
@@ -3711,6 +4438,39 @@ function handleClick(event: MouseEvent): void {
   }
 
   if (!action) {
+    return;
+  }
+
+  if (action === 'admin-refresh') {
+    void refreshAdminUsers();
+    return;
+  }
+
+  if (action === 'admin-signout') {
+    adminSignOut();
+    return;
+  }
+
+  if (action === 'admin-select-user') {
+    const userId = actionElement.getAttribute('data-user-id');
+    if (userId) {
+      void selectAdminUser(userId);
+    }
+    return;
+  }
+
+  if (action === 'admin-close-detail') {
+    adminState = { ...adminState, selectedUserId: null, detail: null, detailError: '' };
+    renderApp();
+    return;
+  }
+
+  if (action === 'admin-view-file' || action === 'admin-download-file') {
+    const userId = actionElement.getAttribute('data-user-id');
+    const certId = actionElement.getAttribute('data-cert-id');
+    if (userId && certId) {
+      void openAdminFile(userId, certId, action === 'admin-download-file');
+    }
     return;
   }
 

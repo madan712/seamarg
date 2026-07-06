@@ -10,4 +10,10 @@ interface CertificateRepository {
 	List<CertificateRecord> findByUserId(String userId);
 
 	Optional<CertificateRecord> findByUserIdAndCertificateId(String userId, String certificateId);
+
+	/**
+	 * Returns every uploaded certificate across all users, newest first. Used by
+	 * the admin dashboard only; not on any customer hot path.
+	 */
+	List<CertificateRecord> findAll();
 }

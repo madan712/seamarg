@@ -28,6 +28,14 @@ class InMemoryCertificateRepository implements CertificateRepository {
 		return Optional.ofNullable(records.get(key(userId, certificateId)));
 	}
 
+	@Override
+	public List<CertificateRecord> findAll() {
+		return records.values()
+			.stream()
+			.sorted(Comparator.comparing(CertificateRecord::uploadedAt).reversed())
+			.toList();
+	}
+
 	private static String key(String userId, String certificateId) {
 		return userId + "::" + certificateId;
 	}
