@@ -167,6 +167,7 @@ data "aws_iam_policy_document" "backend_runtime" {
       "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:Query",
+      "dynamodb:Scan",
       "dynamodb:UpdateItem"
     ]
 
