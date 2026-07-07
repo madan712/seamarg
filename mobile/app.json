@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "Seamarg",
-    "slug": "seamarg-mobile",
+    "slug": "seamarg",
+    "owner": "madan712",
     "scheme": "seamarg",
     "version": "0.0.1",
     "orientation": "portrait",
@@ -10,14 +11,20 @@
     "splash": {
       "backgroundColor": "#0b1f33"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.seamarg.mobile"
     },
     "android": {
       "package": "com.seamarg.mobile",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -41,6 +48,12 @@
     ],
     "experiments": {
       "typedRoutes": false
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a1e4bc45-cfd9-4273-bc3c-bc3350a2df3e"
+      }
     }
   }
 }
