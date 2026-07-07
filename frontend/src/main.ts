@@ -1373,6 +1373,12 @@ async function refreshAdminUsers(): Promise<void> {
   }
 
   renderApp();
+
+  // Also refresh the currently open candidate detail so its data reflects the
+  // database, not the cached copy from when it was first opened.
+  if (adminState.selectedUserId) {
+    await selectAdminUser(adminState.selectedUserId);
+  }
 }
 
 async function selectAdminUser(userId: string): Promise<void> {

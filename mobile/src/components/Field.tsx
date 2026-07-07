@@ -1,4 +1,12 @@
-import { StyleSheet, Switch, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+  type KeyboardTypeOptions,
+} from 'react-native';
 
 import type { FieldType } from '@/features/profile/sections';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -9,6 +17,7 @@ type Props = {
   onChangeText: (value: string) => void;
   type?: FieldType;
   placeholder?: string;
+  options?: string[];
   autoFocus?: boolean;
   secureTextEntry?: boolean;
 };
@@ -27,6 +36,7 @@ export function Field({
   onChangeText,
   type = 'text',
   placeholder,
+  options,
   autoFocus,
   secureTextEntry,
 }: Props) {
@@ -36,6 +46,30 @@ export function Field({
       <View style={[styles.wrap, styles.switchRow]}>
         <Text style={styles.label}>{label}</Text>
         <Switch value={on} onValueChange={(next) => onChangeText(next ? 'true' : 'false')} />
+      </View>
+    );
+  }
+
+  // Dropdowns render as a wrap of tappable chips. Tapping the selected chip
+  // again clears it (the field is optional, matching the web's empty option).
+  if (type === 'select') {
+    return (
+      <View style={styles.wrap}>
+        <Text style={styles.label}>{label}</Text>
+        <View style={styles.chips}>
+          {(options ?? []).map((option) => {
+            const selected = value === option;
+            return (
+              <Pressable
+                key={option}
+                onPress={() => onChangeText(selected ? '' : option)}
+                style={[styles.chip, selected && styles.chipSelected]}
+              >
+                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     );
   }
@@ -82,5 +116,30 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     color: colors.text,
     fontSize: typography.body,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  chip: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  chipSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  chipText: {
+    color: colors.text,
+    fontSize: typography.body,
+  },
+  chipTextSelected: {
+    color: colors.primaryText,
+    fontWeight: '600',
   },
 });

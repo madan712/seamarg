@@ -126,6 +126,7 @@ export default function ProfileSectionScreen() {
               onChangeText={(text) => setValues((prev) => ({ ...prev, [field.name]: text }))}
               type={field.type}
               placeholder={field.placeholder}
+              options={field.options}
             />
           ))}
           <Button title="Save" onPress={onSave} loading={saving} />
