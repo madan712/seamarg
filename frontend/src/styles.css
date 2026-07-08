@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&display=swap");
 
 :root {
   color: #f3eee1;
@@ -20,6 +20,7 @@
   --mist-light: #9fc4d4;
   --ink: #0b2436;
   --ink-soft: #345567;
+  --line: rgba(243, 238, 225, 0.14);
   --line-dark: rgba(243, 238, 225, 0.14);
   --line-paper: rgba(11, 36, 54, 0.16);
   --surface-dark: rgba(8, 28, 40, 0.94);
@@ -108,52 +109,23 @@ a {
 
 .brand {
   display: inline-flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
+  color: var(--paper);
+  font-family: "Oswald", sans-serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   text-decoration: none;
 }
 
-.brand-mark {
-  position: relative;
-  display: grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  color: var(--deep);
-  font-family: "Oswald", sans-serif;
-  font-size: 1rem;
-  font-weight: 700;
-  background: var(--brass);
-  border: 1px solid rgba(227, 185, 101, 0.6);
+.brand .dot {
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  box-shadow: 0 0 0 6px rgba(200, 149, 46, 0.12);
-}
-
-.brand-mark::after {
-  position: absolute;
-  inset: 8px;
-  content: "";
-  border: 1px solid rgba(6, 22, 32, 0.45);
-  border-radius: inherit;
-}
-
-.brand strong,
-.brand small {
-  display: block;
-}
-
-.brand strong {
-  font-family: "Oswald", sans-serif;
-  font-size: 1.14rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.brand small {
-  color: var(--mist-light);
-  font-size: 0.72rem;
-  font-weight: 600;
+  background: var(--brass);
+  box-shadow: 0 0 12px var(--brass);
 }
 
 .site-nav {
@@ -213,15 +185,18 @@ a {
   align-items: center;
   justify-content: center;
   min-height: 44px;
-  padding: 10px 17px;
+  padding: 12px 24px;
   overflow: hidden;
-  font-size: 0.88rem;
-  font-weight: 800;
+  font-family: "Oswald", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   line-height: 1.15;
   text-align: center;
+  text-transform: uppercase;
   text-decoration: none;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 3px;
   transition:
     transform 160ms ease,
     background-color 160ms ease,
@@ -247,7 +222,9 @@ a {
 }
 
 .button-primary:hover {
-  background: var(--brass-light);
+  color: var(--brass-light);
+  background: transparent;
+  border-color: var(--brass);
 }
 
 .button-secondary {
@@ -261,15 +238,15 @@ a {
 }
 
 .button-ghost {
-  color: var(--ink);
+  color: var(--paper);
   background: transparent;
-  border-color: var(--line-paper);
+  border-color: var(--line);
 }
 
 .button-ghost:hover {
-  color: var(--deep);
-  background: rgba(200, 149, 46, 0.12);
-  border-color: rgba(200, 149, 46, 0.42);
+  color: var(--brass-light);
+  background: transparent;
+  border-color: var(--brass);
 }
 
 .site-header .button-ghost {
@@ -623,10 +600,10 @@ p {
 .form-card,
 .auth-card,
 .account-card {
-  background: var(--surface-paper);
-  border: 1px solid var(--line-paper);
-  border-radius: 6px;
-  box-shadow: var(--shadow-paper);
+  background: var(--navy);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 30px 70px -28px rgba(0, 0, 0, 0.6);
 }
 
 .feature-card {
@@ -737,9 +714,9 @@ p {
   width: 100%;
   min-height: 48px;
   padding: 12px 14px;
-  color: var(--ink);
-  background: #fffdf8;
-  border: 1px solid rgba(11, 36, 54, 0.28);
+  color: var(--paper);
+  background: rgba(6, 22, 32, 0.55);
+  border: 1px solid var(--line);
   border-radius: 6px;
 }
 
@@ -747,8 +724,22 @@ p {
   resize: vertical;
 }
 
-.search-wrap input::placeholder {
-  color: rgba(52, 85, 103, 0.76);
+.field select option {
+  color: var(--paper);
+  background: var(--navy);
+}
+
+.search-wrap input::placeholder,
+.field input::placeholder,
+.field textarea::placeholder {
+  color: var(--mist);
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.search-wrap input:focus {
+  border-color: var(--brass);
 }
 
 .search-wrap input:focus,
@@ -807,8 +798,12 @@ p {
 }
 
 .field > span {
-  color: var(--ink);
-  font-weight: 800;
+  color: var(--paper-dim);
+  font-family: "Oswald", sans-serif;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .field-wide,
@@ -856,7 +851,7 @@ p {
 .auth-card p,
 .auth-card .fine-print,
 .account-card p {
-  color: var(--ink-soft);
+  color: var(--mist-light);
 }
 
 .auth-form {
@@ -878,23 +873,23 @@ p {
 
 .auth-card-header h2 {
   margin: 0;
-  color: var(--ink);
+  color: var(--paper);
   font-size: 1.45rem;
   line-height: 1.15;
 }
 
 .auth-kicker {
   margin: 0 0 6px;
-  color: var(--signal);
+  color: var(--brass-light);
   font-size: 0.72rem;
-  font-weight: 900;
-  letter-spacing: 0;
+  font-weight: 700;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .auth-switch {
   margin: 2px 0 0;
-  color: var(--ink-soft);
+  color: var(--mist-light);
   font-size: 0.9rem;
   line-height: 1.45;
   text-align: right;
@@ -910,8 +905,8 @@ p {
 .text-button,
 .field-action {
   padding: 0;
-  color: var(--navy);
-  font-weight: 900;
+  color: var(--brass-light);
+  font-weight: 700;
   text-align: inherit;
   background: transparent;
   border: 0;
@@ -919,7 +914,7 @@ p {
 
 .text-button:hover,
 .field-action:hover {
-  color: var(--signal);
+  color: var(--brass);
   text-decoration: underline;
 }
 
@@ -930,11 +925,11 @@ p {
   justify-content: space-between;
   min-height: 50px;
   padding: 12px 14px;
-  color: var(--ink-soft);
+  color: var(--paper-dim);
   font-size: 0.9rem;
   line-height: 1.35;
-  background: rgba(11, 36, 54, 0.05);
-  border: 1px solid var(--line-paper);
+  background: rgba(6, 22, 32, 0.4);
+  border: 1px solid var(--line);
   border-radius: 6px;
 }
 
@@ -951,15 +946,15 @@ p {
 
 .auth-links button {
   padding: 0;
-  color: var(--navy);
-  font-weight: 800;
+  color: var(--brass-light);
+  font-weight: 700;
   text-align: left;
   background: transparent;
   border: 0;
 }
 
 .auth-links button:hover {
-  color: var(--signal);
+  color: var(--brass);
   text-decoration: underline;
 }
 
@@ -970,27 +965,27 @@ p {
 }
 
 .alert-error {
-  color: #7d2418;
-  background: #ffece7;
-  border: 1px solid rgba(189, 70, 48, 0.34);
+  color: #e08572;
+  background: rgba(189, 70, 48, 0.16);
+  border: 1px solid rgba(189, 70, 48, 0.42);
 }
 
 .alert-warning {
-  color: #654209;
-  background: #fff4d6;
+  color: var(--brass-light);
+  background: rgba(200, 149, 46, 0.16);
   border: 1px solid rgba(200, 149, 46, 0.42);
 }
 
 .alert-success {
-  color: #165339;
-  background: #e8f6ee;
-  border: 1px solid rgba(31, 126, 79, 0.28);
+  color: #9fd4b0;
+  background: rgba(103, 183, 131, 0.16);
+  border: 1px solid rgba(103, 183, 131, 0.36);
 }
 
 .alert-info {
-  color: #0b4359;
-  background: #e9f4f8;
-  border: 1px solid rgba(110, 147, 162, 0.35);
+  color: var(--mist-light);
+  background: rgba(110, 147, 162, 0.16);
+  border: 1px solid rgba(110, 147, 162, 0.36);
 }
 
 .private-shell {
@@ -1300,12 +1295,12 @@ p {
   min-height: 180px;
   place-items: center;
   padding: 24px;
-  color: var(--ink-soft);
+  color: var(--mist-light);
   text-align: center;
 }
 
 .certificate-empty strong {
-  color: var(--ink);
+  color: var(--paper);
 }
 
 .account-card {
@@ -1321,21 +1316,26 @@ p {
 
 .account-card div {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
+  grid-template-columns: 140px minmax(0, 1fr);
   gap: 18px;
   padding-bottom: 14px;
-  border-bottom: 1px solid var(--line-paper);
+  border-bottom: 1px dashed var(--line);
 }
 
 .account-card dt {
-  font-weight: 900;
+  color: var(--brass-light);
+  font-family: "Oswald", sans-serif;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .account-card dd {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
-  color: var(--ink-soft);
+  color: var(--paper);
 }
 
 .site-footer {
@@ -1557,7 +1557,7 @@ p {
 /* Top step progress bar */
 .portal-stepper {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 22px;
 }
@@ -1714,8 +1714,11 @@ p {
   min-height: 42px;
   padding: 9px 12px;
   color: var(--mist-light);
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-family: "Oswald", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   text-decoration: none;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -2001,9 +2004,12 @@ p {
 
 .portal-field > label {
   color: var(--paper-dim);
-  font-size: 0.86rem;
+  font-family: "Oswald", sans-serif;
+  font-size: 0.82rem;
   font-weight: 600;
+  letter-spacing: 0.06em;
   line-height: 1.4;
+  text-transform: uppercase;
 }
 
 .portal-field .req {
@@ -2182,12 +2188,12 @@ p {
 }
 
 .certificate-badge {
-  padding: 2px 9px;
-  color: var(--ink-deep, #06121a);
-  font-family: "Inter", sans-serif;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  padding: 3px 11px;
+  color: var(--deep);
+  font-family: "Oswald", sans-serif;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   background: var(--brass);
   border-radius: 999px;
@@ -2956,5 +2962,972 @@ p {
   .admin-detail-panel,
   .admin-table-wrap {
     max-height: none;
+  }
+}
+
+/* =====================================================================
+   Inner (post-login) pages — align with the landing's editorial voice.
+   Headings/labels already use Oswald; give narrative copy Fraunces so the
+   private portal, auth, and account pages read like the landing, not a
+   monospace form. Data/metadata stays in the mono body font.
+   ===================================================================== */
+.portal-banner-body p,
+.portal-guide-lead,
+.portal-guide-list,
+.portal-guide-help,
+.portal-placeholder-note,
+.auth-panel p,
+.auth-card p,
+.auth-card .fine-print {
+  font-family: "Fraunces", serif;
+}
+
+/* =====================================================================
+   Public landing page ("One crew. Every shore.")
+   Ported from the SEA MARGO design artifact. All rules are scoped under
+   `.landing` so they never collide with the portal / auth / admin styles
+   that reuse generic class names like .hero, .brand, .eyebrow, .feature.
+   ===================================================================== */
+.landing {
+  position: relative;
+  z-index: 0;
+  background: var(--deep);
+}
+.landing h1,
+.landing h2,
+.landing h3,
+.landing h4 {
+  font-family: "Oswald", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+  margin: 0;
+}
+.landing .serif {
+  font-family: "Fraunces", serif;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.landing a {
+  color: inherit;
+  text-decoration: none;
+}
+.landing img {
+  max-width: 100%;
+  display: block;
+}
+
+/* ---------- nav ---------- */
+.landing header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 5%;
+  background: linear-gradient(180deg, rgba(6, 22, 32, 0.92), rgba(6, 22, 32, 0));
+  backdrop-filter: blur(2px);
+}
+.landing .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: "Oswald", sans-serif;
+  font-size: 1.15rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.landing .brand .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--brass);
+  box-shadow: 0 0 12px var(--brass);
+}
+.landing nav ul {
+  display: flex;
+  gap: 34px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.landing nav a {
+  position: relative;
+  padding-bottom: 4px;
+  opacity: 0.85;
+  transition: opacity 0.25s;
+  cursor: pointer;
+}
+.landing nav a:hover {
+  opacity: 1;
+}
+.landing nav a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 1px;
+  width: 0;
+  background: var(--brass);
+  transition: width 0.3s;
+}
+.landing nav a:hover::after {
+  width: 100%;
+}
+.landing .nav-cta {
+  border: 1px solid var(--brass);
+  background: transparent;
+  color: var(--brass-light);
+  padding: 9px 18px;
+  font-family: "Oswald", sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: all 0.25s;
+  cursor: pointer;
+}
+.landing .nav-cta:hover {
+  background: var(--brass);
+  color: var(--deep);
+}
+
+/* ---------- hero ---------- */
+.landing .hero {
+  min-height: 100svh;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 140px 7% 80px;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(200, 149, 46, 0.16), transparent 45%),
+    radial-gradient(circle at 10% 85%, rgba(110, 147, 162, 0.18), transparent 45%),
+    linear-gradient(180deg, rgba(6, 22, 32, 0.88), rgba(8, 28, 40, 0.93) 55%, var(--navy)),
+    url("https://images.unsplash.com/photo-1494412574643-ff11b0a5c1c3?auto=format&fit=crop&w=1800&q=80");
+  background-size: cover;
+  background-position: center;
+}
+.landing .hero-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 70% 60% at 60% 30%, black, transparent);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 60% 30%, black, transparent);
+}
+.landing .compass {
+  position: absolute;
+  top: 14%;
+  right: 6%;
+  width: 230px;
+  height: 230px;
+  opacity: 0.5;
+  animation: landing-spin 60s linear infinite;
+}
+@keyframes landing-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.landing .eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--mist);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 26px;
+  z-index: 2;
+}
+.landing .eyebrow .ln {
+  width: 46px;
+  height: 1px;
+  background: var(--mist);
+}
+.landing .hero h1 {
+  font-size: clamp(3rem, 8vw, 6.6rem);
+  line-height: 0.94;
+  color: var(--paper);
+  z-index: 2;
+  max-width: 14ch;
+}
+.landing .hero h1 em {
+  font-style: normal;
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--brass-light);
+}
+.landing .hero .lede {
+  font-family: "Fraunces", serif;
+  font-size: 1.15rem;
+  line-height: 1.6;
+  color: var(--paper-dim);
+  max-width: 46ch;
+  margin-top: 28px;
+  z-index: 2;
+}
+.landing .hero-actions {
+  display: flex;
+  gap: 18px;
+  margin-top: 42px;
+  flex-wrap: wrap;
+  z-index: 2;
+}
+.landing .btn-primary,
+.landing .btn-ghost {
+  padding: 16px 30px;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: "Oswald", sans-serif;
+  transition: all 0.3s;
+  cursor: pointer;
+}
+.landing .btn-primary {
+  background: var(--brass);
+  color: var(--deep);
+  border: 1px solid var(--brass);
+  font-weight: 600;
+}
+.landing .btn-primary:hover {
+  background: transparent;
+  color: var(--brass-light);
+}
+.landing .btn-ghost {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--paper);
+}
+.landing .btn-ghost:hover {
+  border-color: var(--brass);
+  color: var(--brass-light);
+}
+.landing .hero-stats {
+  display: flex;
+  gap: 60px;
+  margin-top: 70px;
+  z-index: 2;
+  flex-wrap: wrap;
+}
+.landing .hero-stats div b {
+  display: block;
+  font-family: "Oswald", sans-serif;
+  font-size: 2.1rem;
+  color: var(--brass-light);
+}
+.landing .hero-stats div span {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: var(--mist);
+  text-transform: uppercase;
+}
+
+/* ---------- marquee ---------- */
+.landing .marquee {
+  background: var(--brass);
+  color: var(--deep);
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 13px 0;
+  font-family: "Oswald", sans-serif;
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.landing .marquee-track {
+  display: inline-block;
+  animation: landing-scroll 28s linear infinite;
+}
+.landing .marquee-track span {
+  margin: 0 26px;
+}
+@keyframes landing-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ---------- section shell ---------- */
+.landing section {
+  padding: 130px 7%;
+  position: relative;
+  scroll-margin-top: 88px;
+}
+.landing .section-head {
+  max-width: 780px;
+  margin-bottom: 80px;
+}
+.landing .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: "Oswald", sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--brass-light);
+  margin-bottom: 20px;
+}
+.landing .tag::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  background: var(--signal);
+  border-radius: 50%;
+}
+.landing .section-head h2 {
+  font-size: clamp(2.1rem, 4.4vw, 3.4rem);
+  color: var(--paper);
+  line-height: 1.06;
+}
+.landing .section-head p {
+  font-family: "Fraunces", serif;
+  color: var(--mist);
+  margin-top: 22px;
+  font-size: 1.06rem;
+  max-width: 60ch;
+  line-height: 1.6;
+}
+
+/* ---------- Sea Wallet / log book signature section ---------- */
+.landing .logbook {
+  background: var(--navy);
+}
+.landing .log-wrap {
+  display: grid;
+  grid-template-columns: 0.95fr 1.05fr;
+  gap: 70px;
+  align-items: center;
+}
+.landing .wallet-card {
+  position: relative;
+  background: linear-gradient(155deg, #0e2c40, #0a2032);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 38px 34px 34px;
+  box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.7);
+}
+.landing .wallet-card::before {
+  content: "SEA WALLET";
+  position: absolute;
+  top: -13px;
+  left: 30px;
+  background: var(--brass);
+  color: var(--deep);
+  font-family: "Oswald", sans-serif;
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  padding: 5px 12px;
+  font-weight: 600;
+}
+.landing .wallet-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 0.84rem;
+}
+.landing .wallet-row:last-child {
+  border-bottom: none;
+}
+.landing .wallet-row .doc {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.landing .wallet-row .doc b {
+  font-family: "Oswald", sans-serif;
+  letter-spacing: 0.04em;
+  font-size: 0.86rem;
+  color: var(--paper);
+  font-weight: 500;
+}
+.landing .wallet-row .doc small {
+  color: var(--mist);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+}
+.landing .pill {
+  font-family: "Oswald", sans-serif;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.landing .pill.ok {
+  background: rgba(110, 147, 162, 0.18);
+  color: #9fc4d4;
+}
+.landing .pill.warn {
+  background: rgba(200, 149, 46, 0.18);
+  color: var(--brass-light);
+}
+.landing .pill.due {
+  background: rgba(189, 70, 48, 0.2);
+  color: #e08572;
+}
+.landing .wa-toast {
+  margin-top: 24px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  background: #0a2434;
+  border: 1px solid var(--line);
+  padding: 16px 18px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: var(--paper-dim);
+}
+.landing .wa-toast .wa-dot {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 50%;
+  background: #25d366;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  color: var(--deep);
+}
+.landing .log-copy ul {
+  list-style: none;
+  margin: 30px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.landing .log-copy li {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  font-family: "Fraunces", serif;
+  color: var(--paper-dim);
+  line-height: 1.55;
+}
+.landing .log-copy li .num {
+  font-family: "Oswald", sans-serif;
+  color: var(--brass-light);
+  font-size: 0.78rem;
+  border: 1px solid var(--brass);
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- alternating feature blocks ---------- */
+.landing .feature {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: center;
+  padding: 90px 0;
+  border-bottom: 1px solid var(--line);
+}
+.landing .feature:last-child {
+  border-bottom: none;
+}
+.landing .feature.reverse .visual {
+  order: 2;
+}
+.landing .feature.reverse .copy {
+  order: 1;
+}
+.landing .feature .index {
+  font-family: "Oswald", sans-serif;
+  font-size: 0.74rem;
+  color: var(--mist);
+  letter-spacing: 0.2em;
+  margin-bottom: 18px;
+}
+.landing .feature h3 {
+  font-size: clamp(1.6rem, 2.6vw, 2.3rem);
+  color: var(--paper);
+  line-height: 1.12;
+  margin-bottom: 18px;
+}
+.landing .feature p {
+  font-family: "Fraunces", serif;
+  color: var(--mist);
+  font-size: 1.02rem;
+  line-height: 1.62;
+  max-width: 48ch;
+}
+.landing .feature .chips {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 26px;
+}
+.landing .chip {
+  border: 1px solid var(--line);
+  padding: 8px 14px;
+  font-family: "Oswald", sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--paper-dim);
+  border-radius: 20px;
+}
+
+/* ---------- per-feature visual mockups ---------- */
+.landing .visual {
+  position: relative;
+}
+.landing .vcard {
+  background: var(--navy);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 30px;
+  box-shadow: 0 30px 70px -28px rgba(0, 0, 0, 0.6);
+}
+.landing .course-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.landing .course-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: #0a2434;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+.landing .course-item .ci-name {
+  font-family: "Oswald", sans-serif;
+  font-size: 0.85rem;
+  color: var(--paper);
+}
+.landing .course-item .ci-meta {
+  font-size: 0.68rem;
+  color: var(--mist);
+  margin-top: 4px;
+  letter-spacing: 0.04em;
+}
+.landing .map-pin {
+  font-family: "Oswald", sans-serif;
+  font-size: 0.66rem;
+  color: var(--brass-light);
+  border: 1px solid var(--brass);
+  padding: 5px 10px;
+  border-radius: 14px;
+}
+.landing .id-card {
+  background: linear-gradient(155deg, #0e2c40, #091c2a);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.landing .id-top {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.landing .id-photo {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--brass-light), var(--brass));
+  overflow: hidden;
+}
+.landing .id-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.landing .id-name {
+  font-family: "Oswald", sans-serif;
+  font-size: 1.05rem;
+  color: var(--paper);
+}
+.landing .id-rank {
+  font-size: 0.72rem;
+  color: var(--mist);
+  letter-spacing: 0.05em;
+  margin-top: 4px;
+}
+.landing .barcode {
+  height: 54px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--paper) 0 2px,
+    transparent 2px 5px,
+    var(--paper) 5px 7px,
+    transparent 7px 11px
+  );
+  border-radius: 4px;
+  opacity: 0.92;
+}
+.landing .barcode-label {
+  text-align: center;
+  font-size: 0.65rem;
+  letter-spacing: 0.3em;
+  color: var(--mist);
+  margin-top: 8px;
+}
+.landing .scan-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  background: var(--brass-light);
+  box-shadow: 0 0 14px var(--brass-light);
+  animation: landing-scanmove 2.4s ease-in-out infinite;
+}
+@keyframes landing-scanmove {
+  0%,
+  100% {
+    top: 14%;
+  }
+  50% {
+    top: 84%;
+  }
+}
+.landing .renew-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.landing .renew-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: #0a2434;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.landing .check {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--brass);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  color: var(--brass-light);
+}
+.landing .notice-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.landing .notice-item {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.landing .notice-item:last-child {
+  border-bottom: none;
+}
+.landing .notice-tag {
+  font-family: "Oswald", sans-serif;
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  color: var(--signal);
+  text-transform: uppercase;
+}
+.landing .notice-item p {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.82rem;
+  color: var(--paper-dim);
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+.landing .notice-item span.date {
+  font-size: 0.65rem;
+  color: var(--mist);
+  margin-top: 8px;
+  display: block;
+}
+
+/* ---------- community ---------- */
+.landing .community {
+  background: linear-gradient(180deg, var(--navy), var(--deep));
+  text-align: center;
+}
+.landing .community .section-head {
+  margin-left: auto;
+  margin-right: auto;
+}
+.landing .rope-divider {
+  width: 100%;
+  height: 1px;
+  background: repeating-linear-gradient(90deg, var(--brass) 0 8px, transparent 8px 16px);
+  margin: 60px 0;
+  opacity: 0.5;
+}
+.landing .crew-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-top: 10px;
+}
+.landing .crew-grid div {
+  background: var(--navy);
+  padding: 42px 20px;
+}
+.landing .crew-grid b {
+  display: block;
+  font-family: "Oswald", sans-serif;
+  font-size: 2rem;
+  color: var(--brass-light);
+}
+.landing .crew-grid span {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--mist);
+  text-transform: uppercase;
+  display: block;
+  margin-top: 8px;
+}
+.landing .quote {
+  max-width: 760px;
+  margin: 90px auto 0;
+  font-family: "Fraunces", serif;
+  font-style: italic;
+  font-size: 1.5rem;
+  line-height: 1.55;
+  color: var(--paper-dim);
+}
+.landing .quote cite {
+  display: block;
+  font-style: normal;
+  font-family: "Oswald", sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  color: var(--mist);
+  margin-top: 24px;
+  text-transform: uppercase;
+}
+
+/* ---------- CTA band ---------- */
+.landing .cta-band {
+  background:
+    linear-gradient(rgba(200, 149, 46, 0.88), rgba(200, 149, 46, 0.92)),
+    url("https://images.unsplash.com/photo-1605281317010-fe5ffe798166?auto=format&fit=crop&w=1800&q=80");
+  background-size: cover;
+  background-position: center;
+  color: var(--deep);
+  padding: 110px 7%;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.landing .cta-band h2 {
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  max-width: 18ch;
+  margin: 0 auto 28px;
+  line-height: 1.04;
+}
+.landing .cta-band p {
+  font-family: "Fraunces", serif;
+  max-width: 50ch;
+  margin: 0 auto 40px;
+  font-size: 1.05rem;
+  opacity: 0.85;
+}
+.landing .cta-band .btn-primary {
+  background: var(--deep);
+  color: var(--paper);
+  border-color: var(--deep);
+}
+.landing .cta-band .btn-primary:hover {
+  background: transparent;
+  color: var(--deep);
+}
+
+/* ---------- footer ---------- */
+.landing footer {
+  background: var(--deep);
+  padding: 70px 7% 30px;
+}
+.landing .foot-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 50px;
+  padding-bottom: 60px;
+  border-bottom: 1px solid var(--line);
+}
+.landing .foot-grid h4 {
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  color: var(--brass-light);
+  margin-bottom: 18px;
+}
+.landing .foot-grid ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.landing .foot-grid a {
+  font-size: 0.82rem;
+  color: var(--paper-dim);
+  transition: color 0.2s;
+  cursor: pointer;
+}
+.landing .foot-grid a:hover {
+  color: var(--brass-light);
+}
+.landing .foot-brand p {
+  font-family: "Fraunces", serif;
+  color: var(--mist);
+  font-size: 0.92rem;
+  margin-top: 16px;
+  max-width: 32ch;
+  line-height: 1.6;
+}
+.landing .foot-bottom {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 26px;
+  font-size: 0.7rem;
+  color: var(--mist);
+  letter-spacing: 0.04em;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ---------- photo strip ---------- */
+.landing .photo-strip {
+  padding: 0;
+}
+.landing .strip-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 2px;
+}
+.landing .strip-grid figure {
+  position: relative;
+  margin: 0;
+  height: 340px;
+  overflow: hidden;
+}
+.landing .strip-grid img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.92) contrast(1.05);
+  transition: transform 0.6s ease;
+}
+.landing .strip-grid figure:hover img {
+  transform: scale(1.06);
+}
+.landing .strip-grid figcaption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 18px 20px;
+  background: linear-gradient(180deg, transparent, rgba(6, 16, 22, 0.92));
+  font-family: "Oswald", sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper);
+}
+.landing .strip-grid figcaption span {
+  display: block;
+  font-family: "Fraunces", serif;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.82rem;
+  color: var(--mist);
+  margin-top: 4px;
+}
+
+/* ---------- photo accents inside feature visuals ---------- */
+.landing .photo-tile {
+  width: 100%;
+  height: 150px;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 18px;
+  position: relative;
+}
+.landing .photo-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.9);
+}
+.landing .photo-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(6, 22, 32, 0), rgba(6, 22, 32, 0.55));
+}
+
+/* ---------- scroll reveal ---------- */
+.landing .reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.landing .reveal.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 880px) {
+  .landing nav ul {
+    display: none;
+  }
+  .landing .nav-cta {
+    display: none;
+  }
+  .landing .hero {
+    padding-top: 120px;
+  }
+  .landing .log-wrap,
+  .landing .feature,
+  .landing .foot-grid {
+    grid-template-columns: 1fr;
+  }
+  .landing .feature.reverse .visual {
+    order: 1;
+  }
+  .landing .feature.reverse .copy {
+    order: 2;
+  }
+  .landing .crew-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .landing .hero-stats {
+    gap: 34px;
+  }
+  .landing .compass {
+    display: none;
   }
 }

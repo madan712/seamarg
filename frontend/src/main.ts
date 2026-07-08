@@ -74,20 +74,18 @@ let authNotice = '';
 let authNoticeKind: NoticeKind = 'info';
 let welcomeBannerDismissed = window.sessionStorage.getItem(storageKeys.bannerDismissed) === '1';
 let accountMenuOpen = false;
+// Recreated each time the landing page renders; disconnected first to avoid leaks.
+let landingRevealObserver: IntersectionObserver | null = null;
 let pendingEmail = '';
 let pendingPasswordForAutoSignIn = '';
 
 // Portal per-page notice (e.g. "Saved."), scoped to the page that set it.
 let portalNotice: { path: string; message: string; kind: NoticeKind } | null = null;
 
-const publicRoutes: Route[] = [
-  { path: '/', label: 'Home', render: renderHome, nav: 'public' },
-  { path: '/about', label: 'About', render: renderAbout, nav: 'public' },
-  { path: '/help', label: 'Help/FAQ', render: renderHelp, nav: 'public' },
-  { path: '/contact', label: 'Contact', render: renderContact, nav: 'public' },
-  { path: '/support', label: 'Support', render: renderSupport, nav: 'public' },
-  { path: '/signin', label: 'Sign in', render: renderSignIn },
-];
+// The public home page ('/') is a single scrolling landing page rendered
+// outside the shared layout (it carries its own fixed header + footer to match
+// the design). Everything else here is a conventional in-shell route.
+const publicRoutes: Route[] = [{ path: '/signin', label: 'Sign in', render: renderSignIn }];
 
 // Private seafarer portal information architecture.
 // Top-level steps map to the redesigned 3-step profile builder; each step owns a
@@ -137,6 +135,15 @@ const privateSteps: PrivateStep[] = [
       { slug: 'offshore', label: 'Offshore certificates', icon: '📄' },
       { slug: 'flag-state', label: 'Flag State Documents', icon: '🚩' },
     ],
+  },
+  {
+    path: '/courses',
+    label: 'Courses',
+    icon: '🎓',
+    // Placeholder step — the course-booking workspace is built in a later phase.
+    // Any sub-page that has no explicit renderer falls back to the "coming soon"
+    // placeholder in renderPrivateSubPageBody.
+    subPages: [{ slug: 'guide', label: 'Course booking', icon: '🎓' }],
   },
   {
     path: '/sea-service',
@@ -795,51 +802,6 @@ function getRelativesDetails(): RelativesDetails {
     emergencyContactName: savedString(saved, 'emergencyContactName'),
   };
 }
-
-const faqItems = [
-  {
-    category: 'Account',
-    question: 'What is SeaMarg?',
-    answer:
-      'SeaMarg is an AI-powered career, compliance, and opportunity platform for seafarers. It helps users understand next steps around certificates, career planning, safety, and maritime readiness.',
-  },
-  {
-    category: 'Trust',
-    question: 'Is SeaMarg a manning agent?',
-    answer:
-      'No. SeaMarg is not a manning agent, does not offer jobs directly, and does not collect money for job placement.',
-  },
-  {
-    category: 'Compliance',
-    question: 'Can SeaMarg guarantee that I can join a vessel?',
-    answer:
-      'No. SeaMarg provides advisory guidance only. Final acceptance depends on company policy, flag-state requirements, DG Shipping, MMD, and document verification.',
-  },
-  {
-    category: 'DG Shipping',
-    question: 'Does SeaMarg replace DG Shipping or MMD advice?',
-    answer:
-      'No. SeaMarg helps explain common DG Shipping and maritime compliance topics in practical language, but official decisions remain with the relevant authorities.',
-  },
-  {
-    category: 'AI',
-    question: 'What is rule confidence scoring?',
-    answer:
-      'Rule confidence scoring shows how reliable an AI answer is likely to be based on rule stability, company or flag variation, user data completeness, and circular change risk.',
-  },
-  {
-    category: 'Scam safety',
-    question: 'What should I do if an agent asks for money?',
-    answer:
-      'Treat upfront payment requests as a serious scam warning sign. Do not pay for jobs, verify the company, keep written evidence, and report suspicious activity through support.',
-  },
-  {
-    category: 'Access',
-    question: 'Can I use SeaMarg on WhatsApp?',
-    answer:
-      'WhatsApp-first access is part of the product direction. The first web release focuses on public pages and Cognito login.',
-  },
-];
 
 function stripTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
@@ -1913,6 +1875,13 @@ function renderApp(): void {
     return;
   }
 
+  // Public landing page — self-contained scrolling page (own header/footer).
+  if (path === '/') {
+    appRoot.innerHTML = renderLanding(session);
+    bindLanding();
+    return;
+  }
+
   // Public routes.
   const route = publicRoutes.find((candidate) => candidate.path === path) ?? null;
 
@@ -1930,13 +1899,7 @@ function renderLayout(session: AuthSession | null, page: string): string {
 
   return `
     <header class="site-header">
-      <a class="brand" href="#/" aria-label="SeaMarg home">
-        <span class="brand-mark">SM</span>
-        <span>
-          <strong>SeaMarg</strong>
-          <small>One crew. Every shore.</small>
-        </span>
-      </a>
+      <a class="brand" href="#/" aria-label="SeaMarg home"><span class="dot"></span> SeaMarg</a>
       <button class="menu-toggle" type="button" aria-expanded="false" data-action="toggle-menu">
         Menu
       </button>
@@ -1965,9 +1928,7 @@ function renderLayout(session: AuthSession | null, page: string): string {
         <p>AI-powered career and compliance guidance for seafarers.</p>
       </div>
       <div class="footer-links">
-        <a href="#/about">About</a>
-        <a href="#/help">Help/FAQ</a>
-        <a href="#/support">Support</a>
+        <a href="#/">Home</a>
       </div>
       <p class="fine-print">
         SeaMarg provides advisory guidance only. Final decisions depend on company policy, flag-state requirements, DG Shipping, MMD, and document verification.
@@ -1982,168 +1943,357 @@ function navLink(path: string, label: string): string {
   return `<a href="#${path}"${active}>${label}</a>`;
 }
 
-function renderHome(): string {
+// Single scrolling public landing page. Its nav tabs are in-page anchors that
+// smooth-scroll to sections (see the 'scroll-to' action) rather than routes.
+function renderLanding(session: AuthSession | null): string {
+  const signedIn = Boolean(session);
+  const navCta = signedIn
+    ? `<button class="nav-cta" type="button" data-action="go-dashboard">Dashboard</button>`
+    : `<button class="nav-cta" type="button" data-action="login">Sign in</button>`;
+  const heroPrimary = signedIn
+    ? `<button class="btn-primary" type="button" data-action="go-dashboard">Go to my dashboard</button>`
+    : `<button class="btn-primary" type="button" data-action="login">Create my Sea Wallet</button>`;
+  const joinPrimary = signedIn
+    ? `<button class="btn-primary" type="button" data-action="go-dashboard">Go to my dashboard</button>`
+    : `<button class="btn-primary" type="button" data-action="login">Create my Sea Wallet — Free</button>`;
+
   return `
+  <div class="landing">
+    <header>
+      <a class="brand" href="#/" aria-label="SeaMarg home"><span class="dot"></span> SeaMarg</a>
+      <nav aria-label="Primary navigation">
+        <ul>
+          <li><a href="#wallet" data-action="scroll-to" data-target="wallet">Sea Wallet</a></li>
+          <li><a href="#courses" data-action="scroll-to" data-target="courses">Courses</a></li>
+          <li><a href="#id" data-action="scroll-to" data-target="id">Crew ID</a></li>
+          <li><a href="#renewals" data-action="scroll-to" data-target="renewals">Renewals</a></li>
+          <li><a href="#notices" data-action="scroll-to" data-target="notices">DG Notices</a></li>
+          <li><a href="#community" data-action="scroll-to" data-target="community">Community</a></li>
+        </ul>
+      </nav>
+      ${navCta}
+    </header>
+
     <section class="hero">
-      <div class="hero-content">
-        <p class="eyebrow">Crew document command center</p>
-        <h1>One crew. Every shore.</h1>
-        <p class="hero-copy">
-          SeaMarg keeps certificates, compliance signals, career next steps, and scam-risk guidance in one practical workspace before small mistakes become missed contracts.
-        </p>
-        <div class="hero-actions">
-          <button class="button button-primary" type="button" data-action="login">Get started</button>
-          <a class="button button-secondary" href="#/help">Explore FAQ</a>
+      <div class="hero-grid"></div>
+      <svg class="compass" viewBox="0 0 200 200" fill="none" aria-hidden="true">
+        <circle cx="100" cy="100" r="96" stroke="#C8952E" stroke-width="1"/>
+        <circle cx="100" cy="100" r="70" stroke="#6E93A2" stroke-width="0.6"/>
+        <path d="M100 20 L112 100 L100 180 L88 100 Z" fill="#C8952E" opacity="0.85"/>
+        <path d="M20 100 L100 88 L180 100 L100 112 Z" fill="#6E93A2" opacity="0.5"/>
+      </svg>
+      <div class="eyebrow"><span class="ln"></span> A community built by seafarers, for seafarers</div>
+      <h1>One <em>crew</em>.<br>Every shore.</h1>
+      <p class="lede">SeaMarg keeps watch over your documents, your courses, your compliance and your career — so the only thing you have to focus on is the voyage. We're family on board. We stay family on shore.</p>
+      <div class="hero-actions">
+        ${heroPrimary}
+        <button class="btn-ghost" type="button" data-action="scroll-to" data-target="wallet">See how it works</button>
+      </div>
+      <div class="hero-stats">
+        <div><b>30·60·90</b><span>Day renewal alerts</span></div>
+        <div><b>WhatsApp</b><span>Direct to your phone</span></div>
+        <div><b>1 Scan</b><span>Full document access</span></div>
+        <div><b>DG Shipping</b><span>Compliance, tracked</span></div>
+      </div>
+    </section>
+
+    <div class="marquee">
+      <div class="marquee-track">
+        <span>SEA WALLET</span><span>★</span><span>COURSE BOOKING</span><span>★</span><span>CREW ID BARCODE</span><span>★</span><span>DOCUMENT RENEWAL</span><span>★</span><span>DG SHIPPING ALERTS</span><span>★</span>
+        <span>SEA WALLET</span><span>★</span><span>COURSE BOOKING</span><span>★</span><span>CREW ID BARCODE</span><span>★</span><span>DOCUMENT RENEWAL</span><span>★</span><span>DG SHIPPING ALERTS</span><span>★</span>
+      </div>
+    </div>
+
+    <section class="logbook" id="wallet">
+      <div class="log-wrap">
+        <div class="wallet-card reveal">
+          <div class="wallet-row">
+            <div class="doc"><b>Continuous Discharge Certificate</b><small>Issued — DG Shipping</small></div>
+            <span class="pill ok">Valid</span>
+          </div>
+          <div class="wallet-row">
+            <div class="doc"><b>STCW Basic Safety Training</b><small>Expires in 58 days</small></div>
+            <span class="pill warn">60-day alert</span>
+          </div>
+          <div class="wallet-row">
+            <div class="doc"><b>Medical Fitness Certificate</b><small>Expires in 12 days</small></div>
+            <span class="pill due">90-day alert sent</span>
+          </div>
+          <div class="wallet-row">
+            <div class="doc"><b>Seaman's Book</b><small>Expires in 81 days</small></div>
+            <span class="pill ok">30-day watch</span>
+          </div>
+          <div class="wa-toast">
+            <div class="wa-dot">✓</div>
+            <div><b style="font-family:'Oswald', sans-serif; font-size:0.78rem; letter-spacing:0.04em;">SeaMarg</b><br>Your Medical Fitness Certificate expires in 12 days. Reply RENEW and we'll handle the rest. ⚓</div>
+          </div>
         </div>
-        <p class="trust-note">Not a manning agent. Not a certification authority. Guidance is advisory only.</p>
-        <div class="hero-stats" aria-label="SeaMarg highlights">
-          <span><strong>82</strong><small>Readiness score</small></span>
-          <span><strong>90d</strong><small>Expiry watch</small></span>
-          <span><strong>AI</strong><small>Rule confidence</small></span>
+        <div class="log-copy reveal">
+          <div class="tag">Feature 01 — The Sea Wallet</div>
+          <h2 style="font-size:clamp(1.9rem,3.6vw,2.8rem); color:var(--paper);">Every document.<br>One folder. Zero surprises.</h2>
+          <ul>
+            <li><span class="num">1</span> A digital wallet holds every certificate, endorsement and license you carry — passport excluded, everything else included.</li>
+            <li><span class="num">2</span> SeaMarg watches expiry dates around the clock and alerts you on WhatsApp at 90, 60 and 30 days out — no certificate ever sneaks up on you.</li>
+            <li><span class="num">3</span> No more chasing scans in port. Your wallet travels with you, ship to ship, shore to shore.</li>
+          </ul>
         </div>
       </div>
-      <div class="hero-visual" aria-label="SeaMarg dashboard preview">
-        <div class="mock-browser">
-          <div class="mock-browser-bar">
-            <span></span><span></span><span></span>
+    </section>
+
+    <section id="courses">
+      <div class="section-head reveal">
+        <div class="tag">Feature 02 — Course Booking</div>
+        <h2>Find your course. Or let us book it for you.</h2>
+        <p>Tell us the certificate you need. We'll surface the nearest approved institute, show you live batch availability, and — if you'd rather not deal with the paperwork — book your seat for you.</p>
+      </div>
+
+      <div class="feature reveal">
+        <div class="copy">
+          <div class="index">/ Nearest Institute Match</div>
+          <h3>We map the course to your coastline.</h3>
+          <p>Search any DG-approved course and SeaMarg ranks institutes by distance from your home port, current batch openings, and seat availability — so you're not calling five places to find one slot.</p>
+          <div class="chips">
+            <span class="chip">Fire Fighting</span>
+            <span class="chip">STCW Refresher</span>
+            <span class="chip">GMDSS</span>
+            <span class="chip">PSCRB</span>
           </div>
-          <div class="readiness-panel">
-            <p class="panel-kicker">Joining readiness</p>
-            <div class="score-ring">
-              <span>82</span>
-              <small>Medium</small>
+        </div>
+        <div class="visual">
+          <div class="vcard">
+            <div class="photo-tile"><img src="https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?auto=format&fit=crop&w=900&q=80" alt="Maritime training institute"></div>
+            <div class="course-list">
+              <div class="course-item">
+                <div><div class="ci-name">Advanced Fire Fighting</div><div class="ci-meta">Maritime Training Centre — 4.2 km</div></div>
+                <div class="map-pin">3 seats left</div>
+              </div>
+              <div class="course-item">
+                <div><div class="ci-name">STCW Refresher (5-yr)</div><div class="ci-meta">Coastal Skills Academy — 7.8 km</div></div>
+                <div class="map-pin">Batch 14 Jul</div>
+              </div>
+              <div class="course-item">
+                <div><div class="ci-name">GMDSS GOC</div><div class="ci-meta">Anchorage Institute — 11 km</div></div>
+                <div class="map-pin">Book for me →</div>
+              </div>
             </div>
-            <ul>
-              <li><strong>COC:</strong> review before sign-on</li>
-              <li><strong>Medical:</strong> valid for now</li>
-              <li><strong>Next:</strong> confirm company policy</li>
-            </ul>
           </div>
-          <div class="mini-grid">
-            <span>Document wallet</span>
-            <span>Expiry alerts</span>
-            <span>Scam signals</span>
-            <span>DG guidance</span>
+        </div>
+      </div>
+
+      <div class="feature reverse reveal">
+        <div class="copy">
+          <div class="index">/ Book on your behalf</div>
+          <h3>Hand it to us. We'll confirm your seat.</h3>
+          <p>If you'd rather be home with family than on hold with an institute, say the word. Our team confirms the batch, completes the booking and sends your joining instructions straight to your wallet.</p>
+        </div>
+        <div class="visual">
+          <div class="vcard">
+            <div class="renew-stack">
+              <div class="renew-row"><div class="check">✓</div><div><div style="font-family:'Oswald', sans-serif; font-size:0.85rem;">Institute selected</div><div style="font-size:0.7rem; color:var(--mist); margin-top:3px;">Anchorage Institute, 11 km from home</div></div></div>
+              <div class="renew-row"><div class="check">✓</div><div><div style="font-family:'Oswald', sans-serif; font-size:0.85rem;">Seat confirmed</div><div style="font-size:0.7rem; color:var(--mist); margin-top:3px;">Batch starting 14 July</div></div></div>
+              <div class="renew-row"><div class="check">✓</div><div><div style="font-family:'Oswald', sans-serif; font-size:0.85rem;">Joining letter issued</div><div style="font-size:0.7rem; color:var(--mist); margin-top:3px;">Sent to your Sea Wallet</div></div></div>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="section-band">
-      <div class="section-heading">
-        <p class="eyebrow">The problem</p>
-        <h2>Seafarers face a serious information gap.</h2>
-      </div>
-      <div class="feature-grid">
-        ${featureCard('Complex rules', 'DG Shipping, STCW, flag-state, company, and MMD requirements can overlap and change.')}
-        ${featureCard('Scattered proof', 'Certificates, medicals, training evidence, and company requirements are rarely kept in one readable place.')}
-        ${featureCard('Real career cost', 'Last-minute document issues can mean delayed sign-on, missed contracts, and unnecessary agent dependence.')}
+    <section id="id" style="background:var(--navy);">
+      <div class="feature reveal" style="border:none; padding-top:0;">
+        <div class="copy">
+          <div class="tag">Feature 03 — Crew ID</div>
+          <h3 style="font-size:clamp(1.9rem,3.6vw,2.8rem);">One scan. Every document, instantly.</h3>
+          <p>Your SeaMarg profile carries a unique barcode. Walk into any institute or shipping company, and one scan gives them secure, verified access to exactly the documents they've asked for — no folders, no photocopies, no waiting at the gate.</p>
+          <div class="chips">
+            <span class="chip">Instant verification</span>
+            <span class="chip">No paper copies</span>
+            <span class="chip">You control access</span>
+          </div>
+        </div>
+        <div class="visual" style="position:relative;">
+          <div class="id-card">
+            <div class="id-top">
+              <div class="id-photo"><img src="https://images.unsplash.com/photo-1583512603806-077998240c7a?auto=format&fit=crop&w=200&q=80" alt="Crew member"></div>
+              <div>
+                <div class="id-name">CAPT. R. MENEZES</div>
+                <div class="id-rank">Master Mariner · SeaMarg ID #SM-44821</div>
+              </div>
+            </div>
+            <div class="barcode"></div>
+            <div class="barcode-label">SCAN TO VERIFY</div>
+          </div>
+          <div class="scan-line"></div>
+        </div>
       </div>
     </section>
 
-    <section class="split-section">
-      <div>
-        <p class="eyebrow">The SeaMarg approach</p>
-        <h2>A practical digital guide for seafarers.</h2>
-        <p>
-          SeaMarg is designed to understand a seafarer profile, explain eligibility in plain language, surface risk before sign-on, and show clear next steps.
-        </p>
-      </div>
-      <div class="check-list">
-        <p>Certificate and compliance checks</p>
-        <p>Career and promotion roadmap</p>
-        <p>Rule confidence scoring</p>
-        <p>Scam and agent risk alerts</p>
-        <p>WhatsApp-first product direction</p>
+    <section id="renewals">
+      <div class="feature reverse reveal">
+        <div class="copy">
+          <div class="index">/ Feature 04 — Document Renewals</div>
+          <h3>We renew it. You stay at sea.</h3>
+          <p>Beyond your passport, SeaMarg handles renewal of every DG Shipping document on your record — applications, follow-ups, collection. You get a WhatsApp message when it's done, not a stack of forms to chase between contracts.</p>
+          <div class="chips">
+            <span class="chip">COC / COE</span>
+            <span class="chip">Seaman's Book</span>
+            <span class="chip">Medical Certificate</span>
+            <span class="chip">CDC</span>
+          </div>
+        </div>
+        <div class="visual">
+          <div class="vcard">
+            <div class="renew-stack">
+              <div class="renew-row"><div class="check">⟳</div><div><div style="font-family:'Oswald', sans-serif; font-size:0.85rem;">CDC Renewal — In progress</div><div style="font-size:0.7rem; color:var(--mist); margin-top:3px;">Submitted to DG Shipping office</div></div></div>
+              <div class="renew-row"><div class="check">✓</div><div><div style="font-family:'Oswald', sans-serif; font-size:0.85rem;">Medical Certificate — Collected</div><div style="font-size:0.7rem; color:var(--mist); margin-top:3px;">Added to your Sea Wallet</div></div></div>
+              <div class="renew-row"><div class="check">○</div><div><div style="font-family:'Oswald', sans-serif; font-size:0.85rem;">COC Revalidation — Scheduled</div><div style="font-size:0.7rem; color:var(--mist); margin-top:3px;">Begins 90 days before expiry</div></div></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
-  `;
-}
 
-function renderAbout(): string {
-  return `
-    <section class="page-hero">
-      <p class="eyebrow">About SeaMarg</p>
-      <h1>The path for seafarers.</h1>
-      <p>
-        Sea means maritime. Marg means path, guidance, and direction. SeaMarg brings those ideas together as a trusted digital guide for seafarers.
-      </p>
+    <section id="notices" style="background:var(--navy);">
+      <div class="feature reveal" style="border:none; padding-top:0;">
+        <div class="copy">
+          <div class="tag">Feature 05 — DG Shipping Updates</div>
+          <h3 style="font-size:clamp(1.9rem,3.6vw,2.8rem);">New rules don't catch you off guard.</h3>
+          <p>Circulars, compliance changes, certification updates — the moment DG Shipping issues something new, it lands in plain language in your wallet and on WhatsApp, so you always sail compliant.</p>
+        </div>
+        <div class="visual">
+          <div class="vcard">
+            <div class="notice-feed">
+              <div class="notice-item">
+                <div class="notice-tag">Circular Update</div>
+                <p>Revised validity period announced for Medical Fitness Certificates under the latest DG Shipping order.</p>
+                <span class="date">2 days ago</span>
+              </div>
+              <div class="notice-item">
+                <div class="notice-tag">Compliance</div>
+                <p>New STCW endorsement format rolling out — existing certificates remain valid until renewal.</p>
+                <span class="date">9 days ago</span>
+              </div>
+              <div class="notice-item">
+                <div class="notice-tag">Advisory</div>
+                <p>Updated guidelines issued for biometric Seaman's Book applications at regional offices.</p>
+                <span class="date">3 weeks ago</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
-    <section class="section-band">
-      <div class="mission-layout">
+
+    <section class="photo-strip">
+      <div class="strip-grid">
+        <figure>
+          <img src="https://images.unsplash.com/photo-1605281317010-fe5ffe798166?auto=format&fit=crop&w=1200&q=80" alt="Cargo ship at sea">
+          <figcaption>On Board<span>Months at sea, watch after watch</span></figcaption>
+        </figure>
+        <figure>
+          <img src="https://images.unsplash.com/photo-1578662996442-48f60103fc96?auto=format&fit=crop&w=900&q=80" alt="Seafarer on deck">
+          <figcaption>The Crew<span>Family, even far from home</span></figcaption>
+        </figure>
+        <figure>
+          <img src="https://images.unsplash.com/photo-1569263979104-865ab7cd8d13?auto=format&fit=crop&w=900&q=80" alt="Sailor working on ship deck">
+          <figcaption>The Work<span>Skilled hands, every shift</span></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="community" id="community">
+      <div class="section-head reveal">
+        <div class="tag">The Margo Family</div>
+        <h2>We leave no one on the dock.</h2>
+        <p>Every seafarer carries the same life — months at sea, families on shore, the same documents, the same deadlines. SeaMarg exists because that life deserves a crew that has your back on land, the way your shipmates have it on board.</p>
+      </div>
+      <div class="rope-divider"></div>
+      <div class="crew-grid reveal">
+        <div><b>30/60/90</b><span>Day alert rotation</span></div>
+        <div><b>24/7</b><span>Wallet access</span></div>
+        <div><b>Door to Port</b><span>Nearest institute matching</span></div>
+        <div><b>Live</b><span>DG Shipping compliance feed</span></div>
+      </div>
+      <p class="quote reveal">"On board, we're family because we have to be. SeaMarg made sure we're family on shore too — someone watching the dates, the rules, the renewals, while we watch the sea."</p>
+      <cite>— A SeaMarg seafarer, between contracts</cite>
+    </section>
+
+    <section class="cta-band" id="join">
+      <h2>Your watch on shore starts today.</h2>
+      <p>Open your Sea Wallet, get your Crew ID, and let SeaMarg stand the next watch on your documents.</p>
+      ${joinPrimary}
+    </section>
+
+    <footer>
+      <div class="foot-grid">
+        <div class="foot-brand">
+          <div class="brand"><span class="dot"></span>SeaMarg</div>
+          <p>A community of seafarers, sailing under one watch — wherever in the world your ship may be.</p>
+        </div>
         <div>
-          <h2>From confusion to clarity.</h2>
-          <p>
-            SeaMarg exists to help seafarers understand what to do next across compliance, career readiness, certificates, training, and safer opportunities.
-          </p>
+          <h4>PLATFORM</h4>
+          <ul>
+            <li><a href="#wallet" data-action="scroll-to" data-target="wallet">Sea Wallet</a></li>
+            <li><a href="#courses" data-action="scroll-to" data-target="courses">Course Booking</a></li>
+            <li><a href="#id" data-action="scroll-to" data-target="id">Crew ID</a></li>
+            <li><a href="#renewals" data-action="scroll-to" data-target="renewals">Renewals</a></li>
+          </ul>
         </div>
-        <div class="pillar-list">
-          ${pillar('Guidance', 'Profile-aware answers and practical next steps.')}
-          ${pillar('Compliance', 'Certificate, DG Shipping, STCW, and readiness awareness.')}
-          ${pillar('Opportunities', 'A future path toward verified jobs and trusted maritime partners.')}
-          ${pillar('Trust', 'Clear disclaimers, scam awareness, and advisory boundaries.')}
+        <div>
+          <h4>COMMUNITY</h4>
+          <ul>
+            <li><a href="#community" data-action="scroll-to" data-target="community">Our Story</a></li>
+            <li><a href="#notices" data-action="scroll-to" data-target="notices">DG Notices</a></li>
+            <li><a data-action="scroll-to">WhatsApp Support</a></li>
+            <li><a data-action="scroll-to">Partner Institutes</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>CONTACT</h4>
+          <ul>
+            <li><a data-action="scroll-to">hello@seamarg.com</a></li>
+            <li><a data-action="scroll-to">+91 00000 00000</a></li>
+            <li><a data-action="scroll-to">WhatsApp Us</a></li>
+          </ul>
         </div>
       </div>
-    </section>
-  `;
-}
-
-function renderHelp(): string {
-  return `
-    <section class="page-hero compact">
-      <p class="eyebrow">Help/FAQ</p>
-      <h1>Clear answers for common SeaMarg questions.</h1>
-      <div class="search-wrap">
-        <label class="sr-only" for="faq-search">Search FAQ</label>
-        <input id="faq-search" type="search" placeholder="Search account, DG Shipping, safety..." autocomplete="off" />
+      <div class="foot-bottom">
+        <span>© 2026 SeaMarg. One crew, every shore.</span>
+        <span>Built for the people who keep the world moving.</span>
       </div>
-    </section>
-    <section class="faq-list" id="faq-list">
-      ${faqItems.map(renderFaqItem).join('')}
-    </section>
+    </footer>
+  </div>
   `;
 }
 
-function renderContact(): string {
-  return `
-    <section class="page-hero compact">
-      <p class="eyebrow">Contact</p>
-      <h1>Talk to SeaMarg.</h1>
-      <p>Use this page for partnerships, business questions, and general product enquiries.</p>
-    </section>
-    ${renderForm('contact-form', [
-      inputField('name', 'Name', 'text'),
-      inputField('email', 'Email', 'email'),
-      selectField('role', 'Role', ['Seafarer', 'Company', 'Training institute', 'Advisor', 'Other']),
-      inputField('topic', 'Topic', 'text'),
-      textAreaField('message', 'Message'),
-    ])}
-  `;
-}
+function bindLanding(): void {
+  landingRevealObserver?.disconnect();
+  landingRevealObserver = null;
 
-function renderSupport(): string {
-  return `
-    <section class="page-hero compact">
-      <p class="eyebrow">Support</p>
-      <h1>Get help with account, compliance, or safety concerns.</h1>
-      <p>For agent or scam concerns, include only details you are comfortable sharing until a secure evidence upload flow is available.</p>
-    </section>
-    ${renderForm('support-form', [
-      inputField('name', 'Name', 'text'),
-      inputField('email', 'Email or mobile', 'text'),
-      selectField('category', 'Category', [
-        'Account',
-        'Certificate or compliance',
-        'AI answer concern',
-        'Scam or agent report',
-        'Job or company concern',
-        'Other',
-      ]),
-      selectField('priority', 'Priority', ['Normal', 'High', 'Urgent']),
-      inputField('subject', 'Subject', 'text'),
-      textAreaField('description', 'Description'),
-    ])}
-  `;
+  const revealEls = Array.from(document.querySelectorAll<HTMLElement>('.landing .reveal'));
+
+  if (revealEls.length === 0) {
+    return;
+  }
+
+  if (!('IntersectionObserver' in window)) {
+    revealEls.forEach((el) => el.classList.add('show'));
+    return;
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('show');
+          observer.unobserve(entry.target);
+        }
+      });
+    },
+    { threshold: 0.15 },
+  );
+
+  revealEls.forEach((el) => observer.observe(el));
+  landingRevealObserver = observer;
 }
 
 function renderSignIn(): string {
@@ -3338,50 +3488,6 @@ function renderNotFound(): string {
   `;
 }
 
-function featureCard(title: string, body: string): string {
-  return `
-    <article class="feature-card">
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(body)}</p>
-    </article>
-  `;
-}
-
-function pillar(title: string, body: string): string {
-  return `
-    <article>
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(body)}</p>
-    </article>
-  `;
-}
-
-function renderFaqItem(item: (typeof faqItems)[number]): string {
-  return `
-    <article class="faq-item" data-faq-item data-search="${escapeHtml(
-      `${item.category} ${item.question} ${item.answer}`.toLowerCase(),
-    )}">
-      <p>${escapeHtml(item.category)}</p>
-      <h2>${escapeHtml(item.question)}</h2>
-      <p>${escapeHtml(item.answer)}</p>
-    </article>
-  `;
-}
-
-function renderForm(formId: string, fields: string[]): string {
-  return `
-    <section class="form-section">
-      <form class="form-card" id="${formId}">
-        ${fields.join('')}
-        <div class="form-actions">
-          <button class="button button-primary" type="submit">Prepare request</button>
-          <p class="form-message" role="status" aria-live="polite"></p>
-        </div>
-      </form>
-    </section>
-  `;
-}
-
 function inputField(
   name: string,
   label: string,
@@ -4451,6 +4557,22 @@ function handleClick(event: MouseEvent): void {
   }
 
   if (!action) {
+    return;
+  }
+
+  // Landing page: nav tabs / footer links smooth-scroll to a same-page section
+  // instead of navigating. preventDefault keeps the hash (and router) untouched.
+  if (action === 'scroll-to') {
+    event.preventDefault();
+    const targetId = actionElement.dataset.target;
+    if (targetId) {
+      document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    return;
+  }
+
+  if (action === 'go-dashboard') {
+    setPath(DEFAULT_PRIVATE_PATH);
     return;
   }
 
