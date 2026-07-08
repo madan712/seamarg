@@ -40,6 +40,12 @@ export default function Dashboard() {
           onPress={() => router.push('/certificates')}
         />
         <NavCard
+          icon="school-outline"
+          title="Courses"
+          body="Find your next course and let us book the seat for you."
+          onPress={() => router.push('/courses')}
+        />
+        <NavCard
           icon="scan-outline"
           title="Scan a certificate"
           body="Photograph a certificate and let AI pre-fill the details."

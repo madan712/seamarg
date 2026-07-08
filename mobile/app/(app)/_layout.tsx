@@ -62,6 +62,13 @@ export default function AppLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="ribbon-outline" color={color} size={size} />,
         }}
       />
+      <Tabs.Screen
+        name="courses"
+        options={{
+          title: 'Courses',
+          tabBarIcon: ({ color, size }) => <Ionicons name="school-outline" color={color} size={size} />,
+        }}
+      />
     </Tabs>
   );
 }
