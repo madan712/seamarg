@@ -1,13 +1,14 @@
 import { Stack } from 'expo-router';
 
-import { colors } from '@/theme';
+import { colors, fonts } from '@/theme';
 
 export default function ProfileStack() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
+        headerStyle: { backgroundColor: colors.surfaceRaised },
         headerTintColor: colors.text,
+        headerTitleStyle: { fontFamily: fonts.heading },
         contentStyle: { backgroundColor: colors.background },
       }}
     >

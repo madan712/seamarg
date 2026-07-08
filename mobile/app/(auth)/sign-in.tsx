@@ -6,8 +6,9 @@ import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
+import { Eyebrow, ErrorText, Serif, Title } from '@/components/Typography';
 import { normalizeError } from '@/lib/errors';
-import { colors, spacing, typography } from '@/theme';
+import { colors, fonts, spacing, typography } from '@/theme';
 
 export default function SignIn() {
   const { signIn } = useAuth();
@@ -40,10 +41,13 @@ export default function SignIn() {
 
   return (
     <Screen>
-      <Text style={styles.title}>Welcome back</Text>
-      <Text style={styles.subtitle}>Sign in to your Seamarg seafarer portal.</Text>
+      <View style={styles.header}>
+        <Eyebrow dot>Seamarg · Seafarer Portal</Eyebrow>
+        <Title>Welcome back</Title>
+        <Serif>Sign in to manage your profile, documents and certificates.</Serif>
+      </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <ErrorText>{error}</ErrorText> : null}
 
       <Field label="Email" value={email} onChangeText={setEmail} type="email" autoFocus />
       <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
@@ -52,10 +56,10 @@ export default function SignIn() {
 
       <View style={styles.links}>
         <Link href="/forgot-password" style={styles.link}>
-          Forgot password?
+          <Text style={styles.linkText}>Forgot password?</Text>
         </Link>
         <Link href="/sign-up" style={styles.link}>
-          Create an account
+          <Text style={styles.linkText}>Create an account</Text>
         </Link>
       </View>
     </Screen>
@@ -63,9 +67,8 @@ export default function SignIn() {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.text, fontSize: typography.title, fontWeight: '700' },
-  subtitle: { color: colors.textMuted, fontSize: typography.body, marginBottom: spacing.sm },
-  error: { color: colors.danger, fontSize: typography.body },
-  links: { marginTop: spacing.md, gap: spacing.sm, alignItems: 'center' },
-  link: { color: colors.primary, fontSize: typography.body },
+  header: { gap: spacing.sm, marginBottom: spacing.sm },
+  links: { marginTop: spacing.md, gap: spacing.md, alignItems: 'center' },
+  link: { paddingVertical: spacing.xs },
+  linkText: { color: colors.primaryLight, fontFamily: fonts.bodyMedium, fontSize: typography.caption },
 });

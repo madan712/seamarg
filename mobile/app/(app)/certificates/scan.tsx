@@ -7,7 +7,7 @@
 // portal uses) once it's ported into src/features/certificates.
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
 import { SessionExpiredError } from '@/api/client';
 import { uploadCertificateFile } from '@/api/certificates';
@@ -15,8 +15,9 @@ import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
+import { Body, Eyebrow, ErrorText, Heading, Muted, Serif, Title } from '@/components/Typography';
 import { normalizeError } from '@/lib/errors';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, fonts, radius, spacing, tracking, typography } from '@/theme';
 
 type Asset = { uri: string; name: string; type: string };
 
@@ -92,12 +93,13 @@ export default function ScanCertificate() {
 
   return (
     <Screen>
-      <Text style={styles.title}>Scan a certificate</Text>
-      <Text style={styles.subtitle}>
-        Photograph the certificate and we'll pre-fill the details for you to review.
-      </Text>
+      <View style={styles.header}>
+        <Eyebrow dot>AI scan</Eyebrow>
+        <Title>Scan a certificate</Title>
+        <Serif>Photograph the certificate and we'll pre-fill the details for you to review.</Serif>
+      </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <ErrorText>{error}</ErrorText> : null}
 
       <View style={styles.buttonRow}>
         <View style={styles.flex}>
@@ -122,14 +124,14 @@ export default function ScanCertificate() {
 
       {extraction ? (
         <View style={styles.results}>
-          <Text style={styles.section}>AI suggestions</Text>
+          <Heading>AI suggestions</Heading>
           {Object.keys(extraction).length === 0 ? (
-            <Text style={styles.subtitle}>No fields were extracted. Fill the details in manually.</Text>
+            <Serif>No fields were extracted. Fill the details in manually.</Serif>
           ) : (
             Object.entries(extraction).map(([key, value]) => (
               <View key={key} style={styles.resultRow}>
-                <Text style={styles.key}>{key}</Text>
-                <Text style={styles.value}>{value ?? '—'}</Text>
+                <Muted style={styles.key}>{key}</Muted>
+                <Body>{value ?? '—'}</Body>
               </View>
             ))
           )}
@@ -140,9 +142,7 @@ export default function ScanCertificate() {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.text, fontSize: typography.title, fontWeight: '700' },
-  subtitle: { color: colors.textMuted, fontSize: typography.body },
-  error: { color: colors.danger, fontSize: typography.body },
+  header: { gap: spacing.sm, marginBottom: spacing.xs },
   buttonRow: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
   preview: {
@@ -154,7 +154,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   results: { gap: spacing.sm, marginTop: spacing.sm },
-  section: { color: colors.text, fontSize: typography.heading, fontWeight: '600' },
   resultRow: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -163,6 +162,10 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: 2,
   },
-  key: { color: colors.textMuted, fontSize: typography.caption, fontWeight: '600' },
-  value: { color: colors.text, fontSize: typography.body },
+  key: {
+    fontFamily: fonts.headingMedium,
+    fontSize: typography.label,
+    letterSpacing: tracking.label,
+    textTransform: 'uppercase',
+  },
 });

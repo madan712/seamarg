@@ -6,10 +6,10 @@
     "scheme": "seamarg",
     "version": "0.0.1",
     "orientation": "portrait",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "backgroundColor": "#0b1f33"
+      "backgroundColor": "#061620"
     },
     "assetBundlePatterns": [
       "**/*"

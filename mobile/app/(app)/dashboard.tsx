@@ -1,10 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
-import { colors, radius, spacing, typography } from '@/theme';
+import { Body, Eyebrow, Heading, Serif, Title } from '@/components/Typography';
+import { colors, radius, spacing } from '@/theme';
+
+type IconName = keyof typeof Ionicons.glyphMap;
 
 export default function Dashboard() {
   const { session, signOut } = useAuth();
@@ -15,21 +20,27 @@ export default function Dashboard() {
 
   return (
     <Screen>
-      <Text style={styles.greeting}>Hello, {name}</Text>
-      <Text style={styles.subtitle}>Keep your profile and certificates up to date.</Text>
+      <View style={styles.header}>
+        <Eyebrow dot>Welcome back</Eyebrow>
+        <Title numberOfLines={2}>{name}</Title>
+        <Serif>Keep your profile and certificates current — all under one watch.</Serif>
+      </View>
 
       <View style={styles.cards}>
-        <Card
+        <NavCard
+          icon="person-circle-outline"
           title="My profile"
           body="Personal details, passport, education, and contact info."
           onPress={() => router.push('/profile')}
         />
-        <Card
+        <NavCard
+          icon="ribbon-outline"
           title="My certificates"
           body="Your held documents and detailed certificate records."
           onPress={() => router.push('/certificates')}
         />
-        <Card
+        <NavCard
+          icon="scan-outline"
           title="Scan a certificate"
           body="Photograph a certificate and let AI pre-fill the details."
           onPress={() => router.push('/certificates/scan')}
@@ -41,28 +52,46 @@ export default function Dashboard() {
   );
 }
 
-function Card({ title, body, onPress }: { title: string; body: string; onPress: () => void }) {
+function NavCard({
+  icon,
+  title,
+  body,
+  onPress,
+}: {
+  icon: IconName;
+  title: string;
+  body: string;
+  onPress: () => void;
+}) {
   return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>{title}</Text>
-      <Text style={styles.cardBody}>{body}</Text>
-      <Button title="Open" onPress={onPress} />
-    </View>
+    <Card onPress={onPress}>
+      <View style={styles.cardTop}>
+        <View style={styles.iconCircle}>
+          <Ionicons name={icon} size={20} color={colors.primaryLight} />
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.textFaint} />
+      </View>
+      <Heading>{title}</Heading>
+      <Body style={styles.cardBody}>{body}</Body>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  greeting: { color: colors.text, fontSize: typography.title, fontWeight: '700' },
-  subtitle: { color: colors.textMuted, fontSize: typography.body },
-  cards: { gap: spacing.md, marginVertical: spacing.md },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    gap: spacing.sm,
+  header: { gap: spacing.sm, marginBottom: spacing.xs },
+  cards: { gap: spacing.md, marginVertical: spacing.sm },
+  cardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  cardTitle: { color: colors.text, fontSize: typography.heading, fontWeight: '600' },
-  cardBody: { color: colors.textMuted, fontSize: typography.body },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(200, 149, 46, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardBody: { color: colors.textMuted },
 });

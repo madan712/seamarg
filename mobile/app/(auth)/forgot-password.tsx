@@ -1,13 +1,14 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
+import { Eyebrow, ErrorText, Serif, Title } from '@/components/Typography';
 import { normalizeError } from '@/lib/errors';
-import { colors, spacing, typography } from '@/theme';
+import { spacing } from '@/theme';
 
 // Two-step flow in one screen: request a reset code, then submit the code plus
 // a new password. `sent` toggles between the two steps.
@@ -61,8 +62,17 @@ export default function ForgotPassword() {
 
   return (
     <Screen>
-      <Text style={styles.title}>Reset your password</Text>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <View style={styles.header}>
+        <Eyebrow dot>Reset password</Eyebrow>
+        <Title>Reset your password</Title>
+        <Serif>
+          {sent
+            ? 'Enter the code we emailed you and choose a new password.'
+            : "We'll email you a code to reset your password."}
+        </Serif>
+      </View>
+
+      {error ? <ErrorText>{error}</ErrorText> : null}
 
       <Field label="Email" value={email} onChangeText={setEmail} type="email" autoFocus />
 
@@ -86,6 +96,5 @@ export default function ForgotPassword() {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.text, fontSize: typography.title, fontWeight: '700', marginBottom: spacing.sm },
-  error: { color: colors.danger, fontSize: typography.body },
+  header: { gap: spacing.sm, marginBottom: spacing.sm },
 });

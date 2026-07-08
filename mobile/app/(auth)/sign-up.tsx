@@ -6,8 +6,9 @@ import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
+import { Eyebrow, ErrorText, Serif, Title } from '@/components/Typography';
 import { normalizeError } from '@/lib/errors';
-import { colors, spacing, typography } from '@/theme';
+import { colors, fonts, spacing, typography } from '@/theme';
 
 export default function SignUp() {
   const { signUp } = useAuth();
@@ -53,8 +54,13 @@ export default function SignUp() {
 
   return (
     <Screen>
-      <Text style={styles.title}>Create your account</Text>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <View style={styles.header}>
+        <Eyebrow dot>Seamarg · Seafarer Portal</Eyebrow>
+        <Title>Create your account</Title>
+        <Serif>Set up your seafarer profile to keep every document under one watch.</Serif>
+      </View>
+
+      {error ? <ErrorText>{error}</ErrorText> : null}
 
       <Field label="First name" value={firstName} onChangeText={setFirstName} />
       <Field label="Last name" value={lastName} onChangeText={setLastName} />
@@ -68,7 +74,7 @@ export default function SignUp() {
 
       <View style={styles.links}>
         <Link href="/sign-in" style={styles.link}>
-          I already have an account
+          <Text style={styles.linkText}>I already have an account</Text>
         </Link>
       </View>
     </Screen>
@@ -76,8 +82,8 @@ export default function SignUp() {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.text, fontSize: typography.title, fontWeight: '700', marginBottom: spacing.sm },
-  error: { color: colors.danger, fontSize: typography.body },
+  header: { gap: spacing.sm, marginBottom: spacing.sm },
   links: { marginTop: spacing.md, alignItems: 'center' },
-  link: { color: colors.primary, fontSize: typography.body },
+  link: { paddingVertical: spacing.xs },
+  linkText: { color: colors.primaryLight, fontFamily: fonts.bodyMedium, fontSize: typography.caption },
 });

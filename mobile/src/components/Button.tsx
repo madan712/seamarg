@@ -1,6 +1,6 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, fonts, radius, spacing, tracking } from '@/theme';
 
 type Props = {
   title: string;
@@ -23,7 +23,7 @@ export function Button({ title, onPress, variant = 'primary', loading = false, d
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={colors.primaryText} />
+        <ActivityIndicator color={variant === 'primary' ? colors.primaryText : colors.primaryLight} />
       ) : (
         <Text style={[styles.label, variant === 'secondary' && styles.secondaryLabel]}>{title}</Text>
       )}
@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 50,
+    minHeight: 52,
   },
   primary: {
     backgroundColor: colors.primary,
@@ -46,17 +46,19 @@ const styles = StyleSheet.create({
   secondary: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(200, 149, 46, 0.4)',
   },
   dimmed: {
-    opacity: 0.6,
+    opacity: 0.55,
   },
   label: {
     color: colors.primaryText,
-    fontSize: typography.body,
-    fontWeight: '600',
+    fontFamily: fonts.heading,
+    fontSize: 14,
+    letterSpacing: tracking.label,
+    textTransform: 'uppercase',
   },
   secondaryLabel: {
-    color: colors.text,
+    color: colors.primaryLight,
   },
 });

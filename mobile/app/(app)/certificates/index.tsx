@@ -1,6 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { SessionExpiredError } from '@/api/client';
 import {
@@ -11,9 +12,12 @@ import {
 } from '@/api/certificates';
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
+import { Pill } from '@/components/Pill';
 import { Screen } from '@/components/Screen';
+import { Body, ErrorText, Heading, Muted } from '@/components/Typography';
 import { normalizeError } from '@/lib/errors';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, spacing } from '@/theme';
 
 export default function CertificatesIndex() {
   const { session, signOut } = useAuth();
@@ -51,39 +55,44 @@ export default function CertificatesIndex() {
     <Screen>
       <Button title="Scan a new certificate" onPress={() => router.push('/certificates/scan')} />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <ErrorText>{error}</ErrorText> : null}
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
 
-      <Text style={styles.section}>Main documents</Text>
-      <Text style={styles.meta}>{heldCount} marked as held.</Text>
+      <View style={styles.sectionHead}>
+        <Heading>Main documents</Heading>
+        <Muted>{heldCount} marked as held.</Muted>
+      </View>
 
-      <Text style={styles.section}>Detailed certificates</Text>
+      <Heading>Detailed certificates</Heading>
       {Object.keys(entries).length === 0 && !loading ? (
-        <Text style={styles.meta}>No certificate entries yet.</Text>
+        <Muted>No certificate entries yet.</Muted>
       ) : (
         <View style={styles.list}>
           {Object.entries(entries).flatMap(([category, types]) =>
-            Object.entries(types).map(([typeSlug, fields]) => (
-              <Pressable
-                key={`${category}:${typeSlug}`}
-                style={styles.row}
-                onPress={() =>
-                  router.push({
-                    pathname: '/certificates/[category]/[type]',
-                    params: { category, type: typeSlug },
-                  })
-                }
-              >
-                <View style={styles.rowText}>
-                  <Text style={styles.rowTitle}>{humanize(typeSlug)}</Text>
-                  <Text style={styles.rowMeta}>
-                    {humanize(category)}
-                    {(fields as Record<string, unknown>).file ? ' • file attached' : ''}
-                  </Text>
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
-            )),
+            Object.entries(types).map(([typeSlug, fields]) => {
+              const hasFile = Boolean((fields as Record<string, unknown>).file);
+              return (
+                <Card
+                  key={`${category}:${typeSlug}`}
+                  style={styles.row}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/certificates/[category]/[type]',
+                      params: { category, type: typeSlug },
+                    })
+                  }
+                >
+                  <View style={styles.rowText}>
+                    <Body>{humanize(typeSlug)}</Body>
+                    <Muted>{humanize(category)}</Muted>
+                  </View>
+                  <View style={styles.rowRight}>
+                    {hasFile ? <Pill label="File" tone="ok" /> : null}
+                    <Ionicons name="chevron-forward" size={20} color={colors.textFaint} />
+                  </View>
+                </Card>
+              );
+            }),
           )}
         </View>
       )}
@@ -98,23 +107,13 @@ function humanize(slug: string): string {
 }
 
 const styles = StyleSheet.create({
-  error: { color: colors.danger, fontSize: typography.body },
-  section: { color: colors.text, fontSize: typography.heading, fontWeight: '600', marginTop: spacing.sm },
-  meta: { color: colors.textMuted, fontSize: typography.body },
+  sectionHead: { gap: spacing.xs, marginTop: spacing.sm },
   list: { gap: spacing.sm },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
   },
   rowText: { gap: 2, flexShrink: 1 },
-  rowTitle: { color: colors.text, fontSize: typography.body, fontWeight: '600' },
-  rowMeta: { color: colors.textMuted, fontSize: typography.caption },
-  chevron: { color: colors.textMuted, fontSize: 28, lineHeight: 28 },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 });

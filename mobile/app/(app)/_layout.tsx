@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
 
 import { useAuth } from '@/auth/AuthContext';
-import { colors } from '@/theme';
+import { colors, fonts, tracking } from '@/theme';
 
 export default function AppLayout() {
   const { session, initializing } = useAuth();
@@ -17,11 +17,25 @@ export default function AppLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
+        headerStyle: { backgroundColor: colors.surfaceRaised },
         headerTintColor: colors.text,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
+        headerTitleStyle: { fontFamily: fonts.heading },
+        tabBarStyle: {
+          backgroundColor: colors.surfaceRaised,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          height: 64,
+          paddingTop: 6,
+          paddingBottom: 10,
+        },
+        tabBarActiveTintColor: colors.primaryLight,
+        tabBarInactiveTintColor: colors.textFaint,
+        tabBarLabelStyle: {
+          fontFamily: fonts.headingMedium,
+          fontSize: 10,
+          letterSpacing: tracking.tight,
+          textTransform: 'uppercase',
+        },
         sceneStyle: { backgroundColor: colors.background },
       }}
     >

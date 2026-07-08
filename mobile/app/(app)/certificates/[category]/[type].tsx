@@ -3,14 +3,15 @@
 // shows the stored field values so the structure maps clearly to the backend.
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { SessionExpiredError } from '@/api/client';
 import { fetchCertificateEntries } from '@/api/certificates';
 import { useAuth } from '@/auth/AuthContext';
 import { Screen } from '@/components/Screen';
+import { Body, ErrorText, Muted } from '@/components/Typography';
 import { normalizeError } from '@/lib/errors';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, fonts, radius, spacing, tracking, typography } from '@/theme';
 
 export default function CertificateDetail() {
   const { category, type } = useLocalSearchParams<{ category: string; type: string }>();
@@ -46,24 +47,24 @@ export default function CertificateDetail() {
   return (
     <Screen>
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <ErrorText>{error}</ErrorText> : null}
 
-      {!loading && !fields ? <Text style={styles.meta}>This certificate entry was not found.</Text> : null}
+      {!loading && !fields ? <Muted>This certificate entry was not found.</Muted> : null}
 
       {fields
         ? Object.entries(fields)
             .filter(([key]) => key !== 'file')
             .map(([key, value]) => (
               <View key={key} style={styles.row}>
-                <Text style={styles.key}>{key}</Text>
-                <Text style={styles.value}>{formatValue(value)}</Text>
+                <Muted style={styles.key}>{key}</Muted>
+                <Body>{formatValue(value)}</Body>
               </View>
             ))
         : null}
 
       {fields?.file ? (
         <View style={styles.fileBox}>
-          <Text style={styles.value}>📎 A file is attached to this certificate.</Text>
+          <Body>📎 A file is attached to this certificate.</Body>
         </View>
       ) : null}
     </Screen>
@@ -77,8 +78,6 @@ function formatValue(value: unknown): string {
 }
 
 const styles = StyleSheet.create({
-  error: { color: colors.danger, fontSize: typography.body },
-  meta: { color: colors.textMuted, fontSize: typography.body },
   row: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -87,10 +86,16 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: 2,
   },
-  key: { color: colors.textMuted, fontSize: typography.caption, fontWeight: '600' },
-  value: { color: colors.text, fontSize: typography.body },
+  key: {
+    fontFamily: fonts.headingMedium,
+    fontSize: typography.label,
+    letterSpacing: tracking.label,
+    textTransform: 'uppercase',
+  },
   fileBox: {
     backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: radius.sm,
     padding: spacing.md,
   },

@@ -1,13 +1,14 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
+import { Eyebrow, ErrorText, NoticeText, Serif, Title } from '@/components/Typography';
 import { normalizeError } from '@/lib/errors';
-import { colors, spacing, typography } from '@/theme';
+import { spacing } from '@/theme';
 
 export default function Confirm() {
   const params = useLocalSearchParams<{ email?: string }>();
@@ -48,11 +49,14 @@ export default function Confirm() {
 
   return (
     <Screen>
-      <Text style={styles.title}>Verify your email</Text>
-      <Text style={styles.subtitle}>Enter the code Cognito emailed you.</Text>
+      <View style={styles.header}>
+        <Eyebrow dot>Verify email</Eyebrow>
+        <Title>Verify your email</Title>
+        <Serif>Enter the code Cognito emailed you to activate your account.</Serif>
+      </View>
 
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {notice ? <NoticeText>{notice}</NoticeText> : null}
+      {error ? <ErrorText>{error}</ErrorText> : null}
 
       <Field label="Email" value={email} onChangeText={setEmail} type="email" />
       <Field label="Verification code" value={code} onChangeText={setCode} type="number" autoFocus />
@@ -64,8 +68,5 @@ export default function Confirm() {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.text, fontSize: typography.title, fontWeight: '700' },
-  subtitle: { color: colors.textMuted, fontSize: typography.body, marginBottom: spacing.sm },
-  notice: { color: colors.success, fontSize: typography.body },
-  error: { color: colors.danger, fontSize: typography.body },
+  header: { gap: spacing.sm, marginBottom: spacing.sm },
 });

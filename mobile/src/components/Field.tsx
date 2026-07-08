@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 
 import type { FieldType } from '@/features/profile/sections';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, fonts, palette, radius, spacing, tracking, typography } from '@/theme';
 
 type Props = {
   label: string;
@@ -45,7 +45,13 @@ export function Field({
     return (
       <View style={[styles.wrap, styles.switchRow]}>
         <Text style={styles.label}>{label}</Text>
-        <Switch value={on} onValueChange={(next) => onChangeText(next ? 'true' : 'false')} />
+        <Switch
+          value={on}
+          onValueChange={(next) => onChangeText(next ? 'true' : 'false')}
+          trackColor={{ true: colors.primary, false: colors.surfaceMuted }}
+          thumbColor={colors.text}
+          ios_backgroundColor={colors.surfaceMuted}
+        />
       </View>
     );
   }
@@ -82,7 +88,7 @@ export function Field({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder ?? (type === 'date' ? 'YYYY-MM-DD' : undefined)}
-        placeholderTextColor={colors.textMuted}
+        placeholderTextColor={colors.textFaint}
         keyboardType={keyboardByType[type]}
         autoCapitalize={type === 'email' || secureTextEntry ? 'none' : 'sentences'}
         autoCorrect={type !== 'email' && !secureTextEntry}
@@ -104,17 +110,20 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.textMuted,
-    fontSize: typography.caption,
-    fontWeight: '600',
+    fontFamily: fonts.headingMedium,
+    fontSize: typography.label,
+    letterSpacing: tracking.label,
+    textTransform: 'uppercase',
   },
   input: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.sm + 2,
     color: colors.text,
+    fontFamily: fonts.body,
     fontSize: typography.body,
   },
   chips: {
@@ -123,10 +132,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.sm,
+    borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -135,11 +144,12 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   chipText: {
-    color: colors.text,
-    fontSize: typography.body,
+    color: colors.textDim,
+    fontFamily: fonts.body,
+    fontSize: typography.caption,
   },
   chipTextSelected: {
-    color: colors.primaryText,
-    fontWeight: '600',
+    color: palette.deep,
+    fontFamily: fonts.bodyMedium,
   },
 });

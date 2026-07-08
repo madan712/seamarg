@@ -3,7 +3,7 @@
 // FieldDef, and PUTs the whole section on save.
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator } from 'react-native';
 
 import { SessionExpiredError } from '@/api/client';
 import { fetchProfile, saveProfileSection } from '@/api/profile';
@@ -11,9 +11,10 @@ import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
+import { ErrorText, NoticeText, Serif } from '@/components/Typography';
 import { getSection } from '@/features/profile/sections';
 import { normalizeError } from '@/lib/errors';
-import { colors, spacing, typography } from '@/theme';
+import { colors } from '@/theme';
 
 export default function ProfileSectionScreen() {
   const { section: slug } = useLocalSearchParams<{ section: string }>();
@@ -97,7 +98,7 @@ export default function ProfileSectionScreen() {
   if (!section) {
     return (
       <Screen>
-        <Text style={styles.error}>Unknown profile section.</Text>
+        <ErrorText>Unknown profile section.</ErrorText>
       </Screen>
     );
   }
@@ -105,17 +106,17 @@ export default function ProfileSectionScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: section.title }} />
-      {section.description ? <Text style={styles.subtitle}>{section.description}</Text> : null}
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {section.description ? <Serif>{section.description}</Serif> : null}
+      {notice ? <NoticeText>{notice}</NoticeText> : null}
+      {error ? <ErrorText>{error}</ErrorText> : null}
 
       {loading ? (
         <ActivityIndicator color={colors.primary} />
       ) : section.fields.length === 0 ? (
-        <Text style={styles.subtitle}>
+        <Serif>
           This section is not editable in the mobile app yet. Add its fields in
           src/features/profile/sections.ts.
-        </Text>
+        </Serif>
       ) : (
         <>
           {section.fields.map((field) => (
@@ -135,9 +136,3 @@ export default function ProfileSectionScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  subtitle: { color: colors.textMuted, fontSize: typography.body },
-  notice: { color: colors.success, fontSize: typography.body },
-  error: { color: colors.danger, fontSize: typography.body },
-});
