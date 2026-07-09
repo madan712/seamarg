@@ -1135,21 +1135,36 @@ async function openSharedFile(fileId: string, download: boolean): Promise<void> 
   if (!sessionToken || recipientState.busyFileId) {
     return;
   }
+
+  // Open the tab NOW, synchronously inside the click handler, then redirect it
+  // once we have the presigned URL. Opening it after the await would be treated
+  // as an unsolicited popup and blocked (the "it just blinks" symptom).
+  const pending = window.open('', '_blank');
+  if (pending) {
+    pending.opener = null;
+  }
+
   recipientState = { ...recipientState, busyFileId: fileId, error: '' };
   renderApp();
 
   try {
+    // Session travels in the request body — not a custom header — so a CDN/proxy
+    // (CloudFront) can't strip it and it doesn't trigger a CORS preflight.
     const result = await publicShareFetch<{ url: string }>('/api/public/shares/files/download', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Share-Session': sessionToken,
-      },
-      body: JSON.stringify({ fileId, download }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileId, download, session: sessionToken }),
     });
-    window.open(result.url, '_blank', 'noopener');
+    if (pending && !pending.closed) {
+      pending.location.href = result.url;
+    } else {
+      window.location.href = result.url;
+    }
     recipientState = { ...recipientState, busyFileId: null };
   } catch (error) {
+    if (pending && !pending.closed) {
+      pending.close();
+    }
     const gone = Boolean((error as { gone?: boolean }).gone);
     recipientState = {
       ...recipientState,

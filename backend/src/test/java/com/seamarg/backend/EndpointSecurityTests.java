@@ -286,6 +286,46 @@ class EndpointSecurityTests {
 	}
 
 	@Test
+	void publicDownloadAcceptsTheSessionInTheRequestBody() throws Exception {
+		// Owner creates a share, then we redeem it anonymously to get a session token.
+		var createResponse = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+				.post("/api/customer/shares")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"allowDownload\":true}")
+				.with(jwt().jwt(token -> token.subject("share-dl-user"))))
+			.andExpect(status().isCreated())
+			.andReturn();
+		var shareToken =
+			com.jayway.jsonpath.JsonPath.read(createResponse.getResponse().getContentAsString(), "$.token")
+				.toString();
+
+		var redeemResponse = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+				.post("/api/public/shares/redeem")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"" + shareToken + "\"}"))
+			.andExpect(status().isOk())
+			.andReturn();
+		var sessionToken =
+			com.jayway.jsonpath.JsonPath.read(redeemResponse.getResponse().getContentAsString(), "$.sessionToken")
+				.toString();
+
+		// A valid session in the BODY (no custom header) is accepted: the request gets past auth and
+		// fails only at file resolution (410), proving the body-delivered session works end to end.
+		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+				.post("/api/public/shares/files/download")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"fileId\":\"does-not-exist\",\"download\":false,\"session\":\"" + sessionToken + "\"}"))
+			.andExpect(status().isGone());
+
+		// A bogus session in the body is still rejected as unauthorized.
+		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+				.post("/api/public/shares/files/download")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"fileId\":\"does-not-exist\",\"download\":false,\"session\":\"bad-token\"}"))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
 	void adminEndpointRequiresStaticPassword() throws Exception {
 		mockMvc.perform(get("/api/admin/hello")).andExpect(status().isUnauthorized());
 	}

@@ -284,12 +284,17 @@ What shipped, and where it refined the design:
   `SHAREVIS#<fileId>` items in the share package, keeping the certificate package's storage untouched.
   Files are reached only through the certificate package's public facade: a new non-scanning
   `CertificateAdminService.ownedFilesForUser(userId)` method, wrapped by the `OwnedFilesGateway` seam.
-- **Session validation is in-service, not a servlet filter.** The recipient sends the share-session
-  token in the **`X-Share-Session`** header (added to the CORS allow-list in `SecurityConfig`); the
-  capability token is sent in the `redeem` request body. `Authorization` is deliberately avoided so the
-  Cognito resource-server filter never tries to decode it. `ShareSessionService` is a self-contained
-  HMAC-signed token (`base64url(payload).base64url(hmacSha256)`) carrying `shareId|ownerSub|exp` — no
-  JWT dependency, no server-side session store.
+- **Session validation is in-service, not a servlet filter.** After `redeem`, the recipient sends the
+  share-session token in the request **body** (`POST /files/download`) or a **query param**
+  (`GET /files`); the `X-Share-Session` header is still accepted for native clients. `Authorization` is
+  deliberately avoided so the Cognito resource-server filter never tries to decode it. `ShareSessionService`
+  is a self-contained HMAC-signed token (`base64url(payload).base64url(hmacSha256)`) carrying
+  `shareId|ownerSub|exp` — no JWT dependency, no server-side session store.
+  - **Why body/query, not the header (fixed 2026-07-10):** behind CloudFront the custom
+    `X-Share-Session` header was stripped (not in the forwarded set) and also forced a CORS preflight,
+    so the download call hung in production while `redeem` (no custom header) worked. Moving the session
+    into the body makes the download request shape-identical to the working `redeem` call. The token in
+    the body also stays out of access logs.
 - **HTTP verbs:** CORS allows only GET/POST/PUT, so revoke is `POST /shares/{id}/revoke` and visibility
   is `PUT /files/visibility` (no DELETE/PATCH).
 - **Config:** `seamarg.share.link-ttl-seconds` (1800), `seamarg.share.session-ttl-seconds` (900),
@@ -301,6 +306,9 @@ generate link, QR, list/revoke) plus the anonymous **`#/s/<token>`** recipient v
 generated **client-side** with the `qrcode` package (lazy-imported) — the token never reaches a
 third-party QR service. Verified end-to-end in-browser: the recipient route redeems against the live
 backend and renders a clean "no longer available" for an unknown/expired token (410).
+- **View/Download fix (2026-07-10):** the recipient's download opens the new tab **synchronously inside
+  the click** and only redirects it to the presigned URL once the fetch resolves — opening it after the
+  `await` was treated as an unsolicited popup and blocked (the "it just blinks" symptom).
 
 **Mobile** — owner-side parity screen at `mobile/app/(app)/certificates/share.tsx` (`src/api/share.ts`),
 QR via `react-native-qrcode-svg`, native share sheet for the link. The recipient viewer stays **web-only

@@ -8,8 +8,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import software.amazon.awssdk.core.exception.SdkException;
+import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.util.List;
@@ -21,9 +23,14 @@ import java.util.List;
  * <ol>
  *   <li>{@code POST /redeem} with the capability token (in the body, never a
  *       query string) returns a short-lived session token + the file list.</li>
- *   <li>Follow-up calls carry that session token in the {@code X-Share-Session}
- *       header — not {@code Authorization}, which the Cognito resource-server
- *       filter would try to decode and reject.</li>
+ *   <li>Follow-up calls carry that session token in the request <em>body</em>
+ *       ({@code POST /files/download}) or a query param ({@code GET /files}), and
+ *       optionally the {@code X-Share-Session} header. The body/query form is the
+ *       primary path because a CDN/proxy in front of the API (CloudFront) may
+ *       strip an un-forwarded custom header, and a custom header also forces a
+ *       CORS preflight — the header form is kept only for native clients. Never
+ *       {@code Authorization}, which the Cognito resource-server filter would try
+ *       to decode and reject.</li>
  * </ol>
  *
  * The shared file set is resolved live on every call, so un-sharing a file or
@@ -54,25 +61,31 @@ class PublicShareController {
 	}
 
 	@GetMapping("/files")
-	FilesResponse files(@RequestHeader(name = ShareSessionService.HEADER, required = false) String session) {
-		var share = shareService.requireActiveShareForSession(session);
+	FilesResponse files(@RequestHeader(name = ShareSessionService.HEADER, required = false) String sessionHeader,
+			@RequestParam(name = "session", required = false) String sessionParam) {
+		var share = shareService.requireActiveShareForSession(firstNonBlank(sessionParam, sessionHeader));
 		var files = shareableFilesService.listShareableFiles(share.ownerSub());
 		return new FilesResponse(share.allowDownload(), files);
 	}
 
 	@PostMapping("/files/download")
-	DownloadResponse download(@RequestHeader(name = ShareSessionService.HEADER, required = false) String session,
+	DownloadResponse download(@RequestHeader(name = ShareSessionService.HEADER, required = false) String sessionHeader,
 			@RequestBody(required = false) DownloadRequest request) {
 		if (request == null || request.fileId() == null || request.fileId().isBlank()) {
 			throw new ShareGoneException("File is not available.");
 		}
-		var share = shareService.requireActiveShareForSession(session);
+		var share = shareService
+			.requireActiveShareForSession(firstNonBlank(request.session(), sessionHeader));
 		// Preview inline; only allow a forced attachment download when the owner permitted it.
 		var asAttachment = share.allowDownload() && request.download();
 		var url = shareableFilesService.downloadUrlIfShareable(share.ownerSub(), request.fileId(), asAttachment)
 			.orElseThrow(() -> new ShareGoneException("File is not available."));
 		shareService.recordDownload(share);
 		return new DownloadResponse(url.toString());
+	}
+
+	private static String firstNonBlank(String preferred, String fallback) {
+		return StringUtils.hasText(preferred) ? preferred : fallback;
 	}
 
 	@org.springframework.web.bind.annotation.ExceptionHandler(ShareGoneException.class)
@@ -102,7 +115,7 @@ class PublicShareController {
 	record FilesResponse(boolean allowDownload, List<ShareableFilesService.ShareableFile> files) {
 	}
 
-	record DownloadRequest(String fileId, boolean download) {
+	record DownloadRequest(String fileId, boolean download, String session) {
 	}
 
 	record DownloadResponse(String url) {
