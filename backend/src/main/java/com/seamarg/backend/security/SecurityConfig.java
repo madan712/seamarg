@@ -65,7 +65,11 @@ public class SecurityConfig {
 			.toList());
 		configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "OPTIONS"));
 		configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type",
-			AdminPasswordAuthenticationFilter.ADMIN_PASSWORD_HEADER));
+			AdminPasswordAuthenticationFilter.ADMIN_PASSWORD_HEADER,
+			// Share-session token an anonymous recipient sends after redeeming a
+			// share link. Sent as a custom header (not Authorization) so the Cognito
+			// resource-server filter does not try to decode it. See share package.
+			"X-Share-Session"));
 		configuration.setExposedHeaders(Arrays.asList("Location"));
 		configuration.setMaxAge(3600L);
 

@@ -134,6 +134,7 @@ const privateSteps: PrivateStep[] = [
       { slug: 'tanker-passenger', label: 'Tanker/Passenger certificates', icon: '📄' },
       { slug: 'offshore', label: 'Offshore certificates', icon: '📄' },
       { slug: 'flag-state', label: 'Flag State Documents', icon: '🚩' },
+      { slug: 'sharing', label: 'Share documents', icon: '🔗' },
     ],
   },
   {
@@ -645,6 +646,597 @@ async function loadCertificatesFromApi(session: AuthSession, force = false): Pro
   renderApp();
 }
 
+// ---------------------------------------------------------------------------
+// Secure document sharing (docs/document-sharing-design.md).
+//
+// The owner pre-flags which uploaded files are shareable, then mints a secure
+// link shown as a QR code. Anyone can scan it and, on the public recipient
+// viewer (#/s/<token>), read the shareable files without signing in. Nothing
+// snapshots a file subset — the recipient always sees the owner's *current*
+// shareable set (design D1). See ShareController / PublicShareController.
+// ---------------------------------------------------------------------------
+type ShareableFile = {
+  fileId: string;
+  category: string | null;
+  typeSlug: string | null;
+  documentName: string | null;
+  originalFilename: string | null;
+  contentType: string | null;
+  sizeBytes: number;
+  expiryDate: string | null;
+  shareable: boolean;
+};
+
+type ShareView = {
+  shareId: string;
+  status: string;
+  allowDownload: boolean;
+  recipientLabel: string | null;
+  createdAt: string;
+  expiresAt: string;
+  viewCount: number;
+  downloadCount: number;
+  lastAccessedAt: string | null;
+};
+
+type CreatedShare = {
+  shareId: string;
+  token: string;
+  expiresAt: string;
+  allowDownload: boolean;
+  recipientLabel: string | null;
+};
+
+type ShareState = {
+  loadedForSubject: string | null;
+  loading: boolean;
+  error: string;
+  files: ShareableFile[];
+  shares: ShareView[];
+  busy: boolean;
+  lastCreated: CreatedShare | null;
+  notice: string;
+};
+
+let shareState: ShareState = {
+  loadedForSubject: null,
+  loading: false,
+  error: '',
+  files: [],
+  shares: [],
+  busy: false,
+  lastCreated: null,
+  notice: '',
+};
+
+function resetShareState(): void {
+  shareState = {
+    loadedForSubject: null,
+    loading: false,
+    error: '',
+    files: [],
+    shares: [],
+    busy: false,
+    lastCreated: null,
+    notice: '',
+  };
+}
+
+// Build the recipient URL from the app's own origin so it is correct in every
+// environment. The token lives in the fragment, so it never reaches server logs.
+function buildShareUrl(token: string): string {
+  return `${window.location.origin}/#/s/${token}`;
+}
+
+async function loadSharingFromApi(session: AuthSession, force = false): Promise<void> {
+  const subject = claimToString(session.claims.sub) ?? 'anonymous';
+
+  if (!force && shareState.loadedForSubject === subject) {
+    return;
+  }
+
+  shareState = { ...shareState, loading: true, loadedForSubject: subject, error: '' };
+  renderApp();
+
+  try {
+    const [files, shares] = await Promise.all([
+      apiRequest<ShareableFile[]>('/api/customer/files/shareable', session),
+      apiRequest<ShareView[]>('/api/customer/shares', session),
+    ]);
+    shareState = {
+      ...shareState,
+      loadedForSubject: subject,
+      loading: false,
+      files: files ?? [],
+      shares: shares ?? [],
+      error: '',
+    };
+  } catch (error) {
+    shareState = {
+      ...shareState,
+      loadedForSubject: subject,
+      loading: false,
+      files: [],
+      shares: [],
+      error: normalizeError(error).message,
+    };
+  }
+
+  renderApp();
+}
+
+async function toggleShareVisibility(fileId: string, shareable: boolean): Promise<void> {
+  const session = getSession();
+  if (!session) {
+    return;
+  }
+
+  // Optimistic: reflect the toggle immediately, then confirm with the backend.
+  shareState = {
+    ...shareState,
+    files: shareState.files.map((file) => (file.fileId === fileId ? { ...file, shareable } : file)),
+    notice: '',
+  };
+  renderApp();
+
+  try {
+    await apiRequest('/api/customer/files/visibility', session, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileId, shareable }),
+    });
+  } catch (error) {
+    // Revert on failure.
+    shareState = {
+      ...shareState,
+      files: shareState.files.map((file) =>
+        file.fileId === fileId ? { ...file, shareable: !shareable } : file,
+      ),
+      error: normalizeError(error).message,
+    };
+    renderApp();
+  }
+}
+
+async function createShareLink(): Promise<void> {
+  const session = getSession();
+  if (!session || shareState.busy) {
+    return;
+  }
+
+  shareState = { ...shareState, busy: true, error: '', notice: '' };
+  renderApp();
+
+  try {
+    const created = await apiRequest<CreatedShare>('/api/customer/shares', session, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allowDownload: true }),
+    });
+    const shares = await apiRequest<ShareView[]>('/api/customer/shares', session);
+    shareState = {
+      ...shareState,
+      busy: false,
+      lastCreated: created,
+      shares: shares ?? shareState.shares,
+      notice: 'Secure link created. Show the QR code to the person you are sharing with.',
+    };
+  } catch (error) {
+    shareState = { ...shareState, busy: false, error: normalizeError(error).message };
+  }
+
+  renderApp();
+}
+
+async function revokeShareLink(shareId: string): Promise<void> {
+  const session = getSession();
+  if (!session || shareState.busy) {
+    return;
+  }
+
+  shareState = { ...shareState, busy: true, error: '', notice: '' };
+  renderApp();
+
+  try {
+    await apiRequest(`/api/customer/shares/${encodeURIComponent(shareId)}/revoke`, session, {
+      method: 'POST',
+    });
+    const shares = await apiRequest<ShareView[]>('/api/customer/shares', session);
+    const lastCreated =
+      shareState.lastCreated && shareState.lastCreated.shareId === shareId
+        ? null
+        : shareState.lastCreated;
+    shareState = {
+      ...shareState,
+      busy: false,
+      shares: shares ?? shareState.shares,
+      lastCreated,
+      notice: 'Link revoked. It can no longer be opened.',
+    };
+  } catch (error) {
+    shareState = { ...shareState, busy: false, error: normalizeError(error).message };
+  }
+
+  renderApp();
+}
+
+async function copyShareLink(url: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(url);
+    shareState = { ...shareState, notice: 'Link copied to clipboard.' };
+  } catch {
+    shareState = { ...shareState, notice: 'Copy failed — select and copy the link manually.' };
+  }
+  renderApp();
+}
+
+// Render any pending QR placeholders on the page from their data-qr-url. Uses a
+// client-side library so the token is never sent to a third-party QR service.
+async function renderPendingQrCodes(): Promise<void> {
+  const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-qr-url]:not([data-qr-done])'));
+  if (targets.length === 0) {
+    return;
+  }
+  try {
+    const QRCode = await import('qrcode');
+    for (const target of targets) {
+      const url = target.dataset.qrUrl ?? '';
+      if (!url) {
+        continue;
+      }
+      const dataUrl = await QRCode.toDataURL(url, { width: 220, margin: 1 });
+      target.dataset.qrDone = '1';
+      target.innerHTML = `<img src="${dataUrl}" alt="QR code for the secure share link" width="220" height="220" />`;
+    }
+  } catch {
+    for (const target of targets) {
+      target.dataset.qrDone = '1';
+      target.innerHTML =
+        '<p class="share-qr-fallback">QR code could not be drawn. Use the link below instead.</p>';
+    }
+  }
+}
+
+function renderSharing(session: AuthSession | null): string {
+  if (!session) {
+    return renderAuthRequired('Share documents');
+  }
+
+  const subject = claimToString(session.claims.sub) ?? 'anonymous';
+
+  if (shareState.loading && shareState.loadedForSubject !== subject) {
+    return `<div class="portal-loading" role="status">Loading your documents…</div>`;
+  }
+
+  const loadError = shareState.error
+    ? `<p class="alert alert-error portal-alert" role="status">
+         <span>${escapeHtml(shareState.error)}</span>
+         <button type="button" class="button button-ghost" data-action="retry-sharing">Retry</button>
+       </p>`
+    : '';
+
+  const notice = shareState.notice
+    ? `<p class="alert alert-success portal-alert" role="status">${escapeHtml(shareState.notice)}</p>`
+    : '';
+
+  const shareableCount = shareState.files.filter((file) => file.shareable).length;
+
+  const fileRows = shareState.files.length
+    ? shareState.files
+        .map((file) => {
+          const name = file.documentName || file.originalFilename || 'Document';
+          const meta = [file.category ?? '', file.sizeBytes ? formatBytes(file.sizeBytes) : '']
+            .filter(Boolean)
+            .join(' · ');
+          return `
+            <label class="share-file">
+              <input type="checkbox" data-share-file data-file-id="${escapeHtml(
+                file.fileId,
+              )}"${file.shareable ? ' checked' : ''} />
+              <span class="share-file-body">
+                <span class="share-file-name">${escapeHtml(name)}</span>
+                <span class="share-file-meta">${escapeHtml(meta)}</span>
+              </span>
+            </label>`;
+        })
+        .join('')
+    : `<p class="portal-hint">You have no uploaded documents yet. Add certificates first, then choose which to share.</p>`;
+
+  const createDisabled = shareableCount === 0 || shareState.busy;
+  const created = shareState.lastCreated;
+  const createdBlock = created
+    ? (() => {
+        const url = buildShareUrl(created.token);
+        return `
+          <div class="share-created">
+            <h4>Your secure QR link</h4>
+            <p class="portal-hint">Anyone who scans this can view your ${shareableCount} shareable file(s)
+              until it expires. It cannot be opened after that, and you can revoke it any time below.</p>
+            <div class="share-qr" data-qr-url="${escapeHtml(url)}" aria-label="QR code">Generating QR…</div>
+            <div class="share-link-row">
+              <input class="share-link-input" type="text" readonly value="${escapeHtml(url)}" />
+              <button type="button" class="button button-primary" data-action="copy-share-link"
+                data-url="${escapeHtml(url)}">Copy link</button>
+            </div>
+            <p class="portal-hint">Expires ${escapeHtml(formatDateTime(created.expiresAt))}.</p>
+          </div>`;
+      })()
+    : '';
+
+  const activeShares = shareState.shares.length
+    ? `<div class="share-list">
+         <h4>Your share links</h4>
+         ${shareState.shares.map((share) => renderShareRow(share)).join('')}
+       </div>`
+    : '';
+
+  return `
+    <div class="share-page">
+      ${loadError}
+      ${notice}
+      <p class="portal-hint">
+        Pick which uploaded documents can be shared, then generate a secure QR code. The person you share
+        with scans it from any phone — no account needed — and sees only the files you marked shareable.
+        Links expire automatically and can be revoked at any time.
+      </p>
+
+      <section class="share-section">
+        <h3>Shareable documents</h3>
+        <div class="share-files">${fileRows}</div>
+      </section>
+
+      <section class="share-section">
+        <h3>Generate a secure link</h3>
+        <p class="portal-hint">${shareableCount} document(s) marked shareable.</p>
+        <button type="button" class="button button-primary" data-action="create-share"${
+          createDisabled ? ' disabled' : ''
+        }>${shareState.busy ? 'Working…' : 'Generate secure QR link'}</button>
+        ${createdBlock}
+      </section>
+
+      ${activeShares}
+    </div>
+  `;
+}
+
+function renderShareRow(share: ShareView): string {
+  const tone =
+    share.status === 'ACTIVE' ? 'ok' : share.status === 'REVOKED' ? 'warn' : 'neutral';
+  const canRevoke = share.status === 'ACTIVE';
+  const label = share.recipientLabel ? escapeHtml(share.recipientLabel) : 'Secure link';
+  return `
+    <div class="share-row">
+      <div class="share-row-main">
+        <span class="share-row-label">${label}</span>
+        <span class="admin-badge admin-badge-${tone}">${escapeHtml(share.status)}</span>
+      </div>
+      <div class="share-row-meta">
+        <span>Created ${escapeHtml(formatDateTime(share.createdAt))}</span>
+        <span>Expires ${escapeHtml(formatDateTime(share.expiresAt))}</span>
+        <span>${share.viewCount} view(s) · ${share.downloadCount} download(s)</span>
+      </div>
+      ${
+        canRevoke
+          ? `<button type="button" class="button button-ghost" data-action="revoke-share"
+               data-share-id="${escapeHtml(share.shareId)}">Revoke</button>`
+          : ''
+      }
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Public recipient viewer (#/s/<token>) — anonymous, no session. Redeems the
+// capability token for a short-lived share session, then lists/opens files.
+// ---------------------------------------------------------------------------
+type RecipientState = {
+  loadedForToken: string | null;
+  loading: boolean;
+  error: string;
+  gone: boolean;
+  sessionToken: string | null;
+  allowDownload: boolean;
+  recipientLabel: string | null;
+  expiresAt: string | null;
+  files: ShareableFile[];
+  busyFileId: string | null;
+};
+
+let recipientState: RecipientState = {
+  loadedForToken: null,
+  loading: false,
+  error: '',
+  gone: false,
+  sessionToken: null,
+  allowDownload: false,
+  recipientLabel: null,
+  expiresAt: null,
+  files: [],
+  busyFileId: null,
+};
+
+// Anonymous fetch for the recipient flow — no Authorization header (the Cognito
+// resource-server filter would 401 a non-Cognito bearer token), optional
+// X-Share-Session header, and friendly handling of 410 Gone / 401.
+async function publicShareFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (!config.apiBaseUrl) {
+    throw new Error('This share link cannot be opened here: the app is missing its API configuration.');
+  }
+  const response = await fetch(`${config.apiBaseUrl}${path}`, init);
+
+  if (response.status === 410) {
+    const message = await readApiError(response);
+    const error = new Error(message) as Error & { gone?: boolean };
+    error.gone = true;
+    throw error;
+  }
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+  if (!contentType.includes('application/json')) {
+    throw new Error('The server returned an unexpected response.');
+  }
+  return (await response.json()) as T;
+}
+
+type RedeemResponse = {
+  sessionToken: string;
+  sessionExpiresAt: string;
+  linkExpiresAt: string;
+  allowDownload: boolean;
+  recipientLabel: string | null;
+  files: ShareableFile[];
+};
+
+async function redeemShare(token: string): Promise<void> {
+  if (recipientState.loadedForToken === token && (recipientState.sessionToken || recipientState.error)) {
+    return;
+  }
+
+  recipientState = { ...recipientState, loadedForToken: token, loading: true, error: '', gone: false };
+  renderApp();
+
+  try {
+    const result = await publicShareFetch<RedeemResponse>('/api/public/shares/redeem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    recipientState = {
+      ...recipientState,
+      loading: false,
+      error: '',
+      gone: false,
+      sessionToken: result.sessionToken,
+      allowDownload: result.allowDownload,
+      recipientLabel: result.recipientLabel,
+      expiresAt: result.linkExpiresAt,
+      files: result.files ?? [],
+    };
+  } catch (error) {
+    const gone = Boolean((error as { gone?: boolean }).gone);
+    recipientState = {
+      ...recipientState,
+      loading: false,
+      error: normalizeError(error).message,
+      gone,
+      sessionToken: null,
+      files: [],
+    };
+  }
+
+  renderApp();
+}
+
+async function openSharedFile(fileId: string, download: boolean): Promise<void> {
+  const sessionToken = recipientState.sessionToken;
+  if (!sessionToken || recipientState.busyFileId) {
+    return;
+  }
+  recipientState = { ...recipientState, busyFileId: fileId, error: '' };
+  renderApp();
+
+  try {
+    const result = await publicShareFetch<{ url: string }>('/api/public/shares/files/download', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Share-Session': sessionToken,
+      },
+      body: JSON.stringify({ fileId, download }),
+    });
+    window.open(result.url, '_blank', 'noopener');
+    recipientState = { ...recipientState, busyFileId: null };
+  } catch (error) {
+    const gone = Boolean((error as { gone?: boolean }).gone);
+    recipientState = {
+      ...recipientState,
+      busyFileId: null,
+      error: normalizeError(error).message,
+      gone: gone || recipientState.gone,
+    };
+  }
+
+  renderApp();
+}
+
+function bindSharedViewer(token: string): void {
+  void redeemShare(token);
+}
+
+function renderSharedViewer(): string {
+  if (recipientState.loading) {
+    return `<div class="share-viewer"><div class="portal-loading" role="status">Opening secure link…</div></div>`;
+  }
+
+  if (recipientState.gone || (recipientState.error && !recipientState.sessionToken)) {
+    return `
+      <div class="share-viewer">
+        <div class="share-viewer-head">
+          <h1>Shared documents</h1>
+        </div>
+        <p class="alert alert-error" role="status">
+          ${escapeHtml(recipientState.error || 'This link is no longer available.')}
+        </p>
+        <p class="portal-hint">Ask the person who shared it to send you a new link.</p>
+      </div>`;
+  }
+
+  const files = recipientState.files;
+  const fileError = recipientState.error
+    ? `<p class="alert alert-error" role="status">${escapeHtml(recipientState.error)}</p>`
+    : '';
+
+  const list = files.length
+    ? files
+        .map((file) => {
+          const name = file.documentName || file.originalFilename || 'Document';
+          const meta = [file.category ?? '', file.sizeBytes ? formatBytes(file.sizeBytes) : '']
+            .filter(Boolean)
+            .join(' · ');
+          const busy = recipientState.busyFileId === file.fileId;
+          const downloadBtn = recipientState.allowDownload
+            ? `<button type="button" class="button button-ghost" data-action="shared-download-file"
+                 data-file-id="${escapeHtml(file.fileId)}"${busy ? ' disabled' : ''}>Download</button>`
+            : '';
+          return `
+            <div class="share-row">
+              <div class="share-row-main">
+                <span class="share-row-label">${escapeHtml(name)}</span>
+              </div>
+              <div class="share-row-meta"><span>${escapeHtml(meta)}</span></div>
+              <div class="share-viewer-actions">
+                <button type="button" class="button button-primary" data-action="shared-view-file"
+                  data-file-id="${escapeHtml(file.fileId)}"${busy ? ' disabled' : ''}>${
+                    busy ? 'Opening…' : 'View'
+                  }</button>
+                ${downloadBtn}
+              </div>
+            </div>`;
+        })
+        .join('')
+    : `<p class="portal-hint">There are no shared documents to show.</p>`;
+
+  const heading = recipientState.recipientLabel
+    ? `Shared documents for ${escapeHtml(recipientState.recipientLabel)}`
+    : 'Shared documents';
+
+  return `
+    <div class="share-viewer">
+      <div class="share-viewer-head">
+        <h1>${heading}</h1>
+        <p class="portal-hint">These documents were shared with you securely.${
+          recipientState.expiresAt ? ` Access expires ${escapeHtml(formatDateTime(recipientState.expiresAt))}.` : ''
+        }</p>
+      </div>
+      ${fileError}
+      <div class="share-list">${list}</div>
+    </div>
+  `;
+}
+
 function savedSection(slug: string): Record<string, unknown> {
   return profileState.sections[slug] ?? {};
 }
@@ -1069,6 +1661,7 @@ function signOut(): void {
   clearSession();
   resetProfileState();
   resetCertificatesState();
+  resetShareState();
   setPath('/');
   renderApp();
 }
@@ -1828,6 +2421,15 @@ function renderApp(): void {
     }
     appRoot.innerHTML = renderAdminApp();
     bindAdminPage();
+    return;
+  }
+
+  // Public recipient viewer for a shared link (#/s/<token>). Anonymous — no
+  // session required; the capability token lives in the fragment.
+  if (path.startsWith('/s/')) {
+    const token = decodeURIComponent(path.slice('/s/'.length));
+    appRoot.innerHTML = renderLayout(session, renderSharedViewer());
+    bindSharedViewer(token);
     return;
   }
 
@@ -2695,6 +3297,10 @@ function renderPrivateSubPageBody(
     return renderMainDocumentsForm(session);
   }
 
+  if (step.path === '/certificates' && sub.slug === 'sharing') {
+    return renderSharing(session);
+  }
+
   if (step.path === '/certificates' && certificateCatalog(sub.slug).length > 0) {
     return renderCertificateCategory(session, sub.slug);
   }
@@ -3558,6 +4164,22 @@ function bindCurrentPage(session: AuthSession | null): void {
   if (session && getCurrentPath().startsWith('/certificates')) {
     void loadCertificatesFromApi(session);
   }
+
+  // Load sharing data + draw any QR codes on the "Share documents" page.
+  if (session && getCurrentPath().startsWith('/certificates/sharing')) {
+    void loadSharingFromApi(session);
+    void renderPendingQrCodes();
+  }
+
+  // Wire the shareable-file toggles on the "Share documents" page.
+  document.querySelectorAll<HTMLInputElement>('input[data-share-file]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const fileId = input.dataset.fileId ?? '';
+      if (fileId) {
+        void toggleShareVisibility(fileId, input.checked);
+      }
+    });
+  });
 
   // Wire certificate file inputs (upload → AI read → prefill).
   document.querySelectorAll<HTMLInputElement>('input[data-cert-file]').forEach((input) => {
@@ -4654,6 +5276,43 @@ function handleClick(event: MouseEvent): void {
     if (session) {
       void loadCertificatesFromApi(session, true);
     }
+  }
+
+  if (action === 'retry-sharing') {
+    const session = getSession();
+    if (session) {
+      void loadSharingFromApi(session, true);
+    }
+    return;
+  }
+
+  if (action === 'create-share') {
+    void createShareLink();
+    return;
+  }
+
+  if (action === 'revoke-share') {
+    const shareId = actionElement.getAttribute('data-share-id');
+    if (shareId) {
+      void revokeShareLink(shareId);
+    }
+    return;
+  }
+
+  if (action === 'copy-share-link') {
+    const url = actionElement.getAttribute('data-url');
+    if (url) {
+      void copyShareLink(url);
+    }
+    return;
+  }
+
+  if (action === 'shared-view-file' || action === 'shared-download-file') {
+    const fileId = actionElement.getAttribute('data-file-id');
+    if (fileId) {
+      void openSharedFile(fileId, action === 'shared-download-file');
+    }
+    return;
   }
 
   if (action === 'toggle-certificate') {

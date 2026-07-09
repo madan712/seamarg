@@ -76,6 +76,32 @@ public class CertificateAdminService {
 	}
 
 	/**
+	 * All uploaded files owned by one user, across both storage paths, newest
+	 * first — resolved with per-user queries only (no cross-user table scan), so
+	 * it is safe on a customer hot path. Used by the document-sharing feature to
+	 * present the "which of my files are shareable" list. Unlike
+	 * {@link #filesForUser(String)}, this does not touch other users' data.
+	 */
+	public List<AdminFile> ownedFilesForUser(String userId) {
+		var files = new ArrayList<AdminFile>();
+
+		for (var record : certificateRepository.findByUserId(userId)) {
+			files.add(fromRecord(record));
+		}
+
+		for (var item : certificateDataRepository.findByUserIdAndPrefix(userId, ENTRY_PREFIX)) {
+			var file = fromEntry(userId, item.sortKey(), item.payloadJson(), null);
+			if (file != null) {
+				files.add(file);
+			}
+		}
+
+		files.sort(Comparator.comparing(AdminFile::uploadedAt,
+			Comparator.nullsLast(Comparator.naturalOrder())).reversed());
+		return files;
+	}
+
+	/**
 	 * Creates a short-lived presigned URL for one user's file, or an empty result
 	 * when it cannot be found. Resolves both standalone records (by certificate
 	 * id) and entry-attached files (by {@code entry~<category>~<type>} id).

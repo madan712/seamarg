@@ -226,6 +226,66 @@ class EndpointSecurityTests {
 	}
 
 	@Test
+	void customerSharesRequireJwt() throws Exception {
+		mockMvc.perform(get("/api/customer/shares")).andExpect(status().isUnauthorized());
+		mockMvc.perform(get("/api/customer/files/shareable")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void customerCanFlagShareableCreateAndRevokeAShare() throws Exception {
+		// Save a certificate entry with an attached file so the user owns something shareable.
+		mockMvc.perform(put("/api/customer/certificates/general/stcw-basic-safety-training")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"issuedDate\":\"2024-01-10\",\"issuePlace\":\"Mumbai\","
+					+ "\"issuingAuthority\":\"DG Shipping\",\"number\":\"ABC-1\","
+					+ "\"file\":{\"bucketName\":\"b\",\"objectKey\":\"k\",\"originalFilename\":\"stcw.pdf\","
+					+ "\"contentType\":\"application/pdf\",\"sizeBytes\":2048}}")
+				.with(jwt().jwt(token -> token.subject("share-user-1"))))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(put("/api/customer/files/visibility")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"fileId\":\"entry~general~stcw-basic-safety-training\",\"shareable\":true}")
+				.with(jwt().jwt(token -> token.subject("share-user-1"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.shareable").value(true));
+
+		var response = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+				.post("/api/customer/shares")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"allowDownload\":true,\"recipientLabel\":\"Port Agent\"}")
+				.with(jwt().jwt(token -> token.subject("share-user-1"))))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.token").isNotEmpty())
+			.andExpect(jsonPath("$.shareId").isNotEmpty())
+			.andReturn();
+
+		var body = response.getResponse().getContentAsString();
+		var shareId = com.jayway.jsonpath.JsonPath.read(body, "$.shareId").toString();
+
+		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+				.post("/api/customer/shares/" + shareId + "/revoke")
+				.with(jwt().jwt(token -> token.subject("share-user-1"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("REVOKED"));
+	}
+
+	@Test
+	void publicRedeemIsAnonymousAndReportsGoneForAnUnknownToken() throws Exception {
+		// Reaches the controller without a JWT (no 401), and an unknown token is 410 Gone.
+		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+				.post("/api/public/shares/redeem")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"totally-made-up\"}"))
+			.andExpect(status().isGone());
+	}
+
+	@Test
+	void publicFilesEndpointRejectsAMissingSession() throws Exception {
+		mockMvc.perform(get("/api/public/shares/files")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
 	void adminEndpointRequiresStaticPassword() throws Exception {
 		mockMvc.perform(get("/api/admin/hello")).andExpect(status().isUnauthorized());
 	}

@@ -1,0 +1,113 @@
+package com.seamarg.backend.share;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import software.amazon.awssdk.core.exception.SdkException;
+
+import java.time.Instant;
+import java.util.List;
+
+/**
+ * Anonymous recipient API for a shared link (open tier). The flow is
+ * redeem → session → list/download (design §2.2):
+ *
+ * <ol>
+ *   <li>{@code POST /redeem} with the capability token (in the body, never a
+ *       query string) returns a short-lived session token + the file list.</li>
+ *   <li>Follow-up calls carry that session token in the {@code X-Share-Session}
+ *       header — not {@code Authorization}, which the Cognito resource-server
+ *       filter would try to decode and reject.</li>
+ * </ol>
+ *
+ * The shared file set is resolved live on every call, so un-sharing a file or
+ * revoking the link takes effect immediately (design D1/P3).
+ */
+@Slf4j
+@RestController
+@RequestMapping("/api/public/shares")
+class PublicShareController {
+
+	private final ShareService shareService;
+	private final ShareableFilesService shareableFilesService;
+
+	PublicShareController(ShareService shareService, ShareableFilesService shareableFilesService) {
+		this.shareService = shareService;
+		this.shareableFilesService = shareableFilesService;
+	}
+
+	@PostMapping("/redeem")
+	RedeemResponse redeem(@RequestBody(required = false) RedeemRequest request) {
+		if (request == null || request.token() == null || request.token().isBlank()) {
+			throw new ShareGoneException("This link is no longer available.");
+		}
+		var redeemed = shareService.redeem(request.token(), request.pin());
+		var files = shareableFilesService.listShareableFiles(redeemed.ownerSub());
+		return new RedeemResponse(redeemed.sessionToken(), redeemed.sessionExpiresAt(), redeemed.expiresAt(),
+			redeemed.allowDownload(), redeemed.recipientLabel(), files);
+	}
+
+	@GetMapping("/files")
+	FilesResponse files(@RequestHeader(name = ShareSessionService.HEADER, required = false) String session) {
+		var share = shareService.requireActiveShareForSession(session);
+		var files = shareableFilesService.listShareableFiles(share.ownerSub());
+		return new FilesResponse(share.allowDownload(), files);
+	}
+
+	@PostMapping("/files/download")
+	DownloadResponse download(@RequestHeader(name = ShareSessionService.HEADER, required = false) String session,
+			@RequestBody(required = false) DownloadRequest request) {
+		if (request == null || request.fileId() == null || request.fileId().isBlank()) {
+			throw new ShareGoneException("File is not available.");
+		}
+		var share = shareService.requireActiveShareForSession(session);
+		// Preview inline; only allow a forced attachment download when the owner permitted it.
+		var asAttachment = share.allowDownload() && request.download();
+		var url = shareableFilesService.downloadUrlIfShareable(share.ownerSub(), request.fileId(), asAttachment)
+			.orElseThrow(() -> new ShareGoneException("File is not available."));
+		shareService.recordDownload(share);
+		return new DownloadResponse(url.toString());
+	}
+
+	@org.springframework.web.bind.annotation.ExceptionHandler(ShareGoneException.class)
+	ResponseEntity<ApiError> gone(ShareGoneException exception) {
+		return ResponseEntity.status(HttpStatus.GONE).body(new ApiError(exception.getMessage()));
+	}
+
+	@org.springframework.web.bind.annotation.ExceptionHandler(ShareSessionInvalidException.class)
+	ResponseEntity<ApiError> unauthorized(ShareSessionInvalidException exception) {
+		return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ApiError(exception.getMessage()));
+	}
+
+	@org.springframework.web.bind.annotation.ExceptionHandler(SdkException.class)
+	ResponseEntity<ApiError> storageFailure(SdkException exception) {
+		log.warn("Share storage request failed", exception);
+		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+			.body(new ApiError("This service is temporarily unavailable. Please try again shortly."));
+	}
+
+	record RedeemRequest(String token, String pin) {
+	}
+
+	record RedeemResponse(String sessionToken, Instant sessionExpiresAt, Instant linkExpiresAt, boolean allowDownload,
+			String recipientLabel, List<ShareableFilesService.ShareableFile> files) {
+	}
+
+	record FilesResponse(boolean allowDownload, List<ShareableFilesService.ShareableFile> files) {
+	}
+
+	record DownloadRequest(String fileId, boolean download) {
+	}
+
+	record DownloadResponse(String url) {
+	}
+
+	record ApiError(String message) {
+	}
+}

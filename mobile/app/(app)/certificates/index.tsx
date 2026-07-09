@@ -54,6 +54,11 @@ export default function CertificatesIndex() {
   return (
     <Screen>
       <Button title="Scan a new certificate" onPress={() => router.push('/certificates/scan')} />
+      <Button
+        title="Share documents"
+        variant="secondary"
+        onPress={() => router.push('/certificates/share')}
+      />
 
       {error ? <ErrorText>{error}</ErrorText> : null}
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
