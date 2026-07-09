@@ -2061,7 +2061,7 @@ function renderLanding(session: AuthSession | null): string {
         </div>
         <div class="visual">
           <div class="vcard">
-            <div class="photo-tile"><img src="https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?auto=format&fit=crop&w=900&q=80" alt="Maritime training institute"></div>
+            <div class="photo-tile"><img src="https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=900&q=80" alt="Instructor teaching a classroom training session"></div>
             <div class="course-list">
               <div class="course-item">
                 <div><div class="ci-name">Advanced Fire Fighting</div><div class="ci-meta">Maritime Training Centre — 4.2 km</div></div>
@@ -2186,11 +2186,11 @@ function renderLanding(session: AuthSession | null): string {
     <section class="photo-strip">
       <div class="strip-grid">
         <figure>
-          <img src="https://images.unsplash.com/photo-1605281317010-fe5ffe798166?auto=format&fit=crop&w=1200&q=80" alt="Cargo ship at sea">
+          <img src="https://images.unsplash.com/photo-1552207802-77bcb0d13122?auto=format&fit=crop&w=1200&q=80" alt="Ship at sea">
           <figcaption>On Board<span>Months at sea, watch after watch</span></figcaption>
         </figure>
         <figure>
-          <img src="https://images.unsplash.com/photo-1578662996442-48f60103fc96?auto=format&fit=crop&w=900&q=80" alt="Seafarer on deck">
+          <img src="https://images.unsplash.com/photo-1779315215518-8dabd6432dcd?auto=format&fit=crop&w=900&q=80" alt="Ship officer in uniform">
           <figcaption>The Crew<span>Family, even far from home</span></figcaption>
         </figure>
         <figure>
