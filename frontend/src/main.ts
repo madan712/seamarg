@@ -1039,6 +1039,7 @@ type RecipientState = {
   recipientLabel: string | null;
   expiresAt: string | null;
   files: ShareableFile[];
+  busyFileId: string | null;
 };
 
 let recipientState: RecipientState = {
@@ -1051,6 +1052,7 @@ let recipientState: RecipientState = {
   recipientLabel: null,
   expiresAt: null,
   files: [],
+  busyFileId: null,
 };
 
 // Anonymous fetch for the recipient flow — no Authorization header (the Cognito
@@ -1134,15 +1136,52 @@ async function redeemShare(token: string): Promise<void> {
   renderApp();
 }
 
-// Absolute URL of the backend's download-redirect endpoint for one file. Used as
-// a plain anchor href so the browser navigates synchronously with the click.
-function sharedFileUrl(fileId: string, download: boolean): string {
-  const params = new URLSearchParams({
-    fileId,
-    session: recipientState.sessionToken ?? '',
-    download: String(download),
-  });
-  return `${config.apiBaseUrl}/api/public/shares/files/download?${params.toString()}`;
+// Fetch a fresh presigned URL and open it. The session travels in the POST body
+// (same transport as redeem) so a CDN/proxy can't strip it — a query string on a
+// GET was being dropped by CloudFront, yielding 401. The target tab is opened
+// synchronously inside the click gesture so the popup blocker doesn't fire; it's
+// then pointed at the presigned URL once the fetch resolves.
+async function openSharedFile(fileId: string, download: boolean): Promise<void> {
+  const sessionToken = recipientState.sessionToken;
+  if (!sessionToken || recipientState.busyFileId) {
+    return;
+  }
+
+  const tab = window.open('about:blank', '_blank');
+  if (tab) {
+    tab.opener = null;
+  }
+
+  recipientState = { ...recipientState, busyFileId: fileId, error: '' };
+  renderApp();
+
+  try {
+    const result = await publicShareFetch<{ url: string }>('/api/public/shares/files/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileId, download, session: sessionToken }),
+    });
+    if (tab && !tab.closed) {
+      tab.location.href = result.url;
+    } else {
+      // Popup was blocked: fall back to navigating the current tab.
+      window.location.href = result.url;
+    }
+    recipientState = { ...recipientState, busyFileId: null };
+  } catch (error) {
+    if (tab && !tab.closed) {
+      tab.close();
+    }
+    const gone = Boolean((error as { gone?: boolean }).gone);
+    recipientState = {
+      ...recipientState,
+      busyFileId: null,
+      error: normalizeError(error).message,
+      gone: gone || recipientState.gone,
+    };
+  }
+
+  renderApp();
 }
 
 function bindSharedViewer(token: string): void {
@@ -1179,13 +1218,10 @@ function renderSharedViewer(): string {
           const meta = [file.category ?? '', file.sizeBytes ? formatBytes(file.sizeBytes) : '']
             .filter(Boolean)
             .join(' · ');
-          // Plain links to the backend's redirect endpoint: the browser opens a
-          // new tab synchronously with the click (no fetch, no popup blocker), and
-          // the server 302s to the presigned URL. target=_blank keeps this viewer.
+          const busy = recipientState.busyFileId === file.fileId;
           const downloadBtn = recipientState.allowDownload
-            ? `<a class="button button-ghost" href="${escapeHtml(
-                sharedFileUrl(file.fileId, true),
-              )}" target="_blank" rel="noopener">Download</a>`
+            ? `<button type="button" class="button button-ghost" data-action="shared-download-file"
+                 data-file-id="${escapeHtml(file.fileId)}"${busy ? ' disabled' : ''}>Download</button>`
             : '';
           return `
             <div class="share-row">
@@ -1194,9 +1230,10 @@ function renderSharedViewer(): string {
               </div>
               <div class="share-row-meta"><span>${escapeHtml(meta)}</span></div>
               <div class="share-viewer-actions">
-                <a class="button button-primary" href="${escapeHtml(
-                  sharedFileUrl(file.fileId, false),
-                )}" target="_blank" rel="noopener">View</a>
+                <button type="button" class="button button-primary" data-action="shared-view-file"
+                  data-file-id="${escapeHtml(file.fileId)}"${busy ? ' disabled' : ''}>${
+                    busy ? 'Opening…' : 'View'
+                  }</button>
                 ${downloadBtn}
               </div>
             </div>`;
@@ -5288,6 +5325,14 @@ function handleClick(event: MouseEvent): void {
     const url = actionElement.getAttribute('data-url');
     if (url) {
       void copyShareLink(url);
+    }
+    return;
+  }
+
+  if (action === 'shared-view-file' || action === 'shared-download-file') {
+    const fileId = actionElement.getAttribute('data-file-id');
+    if (fileId) {
+      void openSharedFile(fileId, action === 'shared-download-file');
     }
     return;
   }

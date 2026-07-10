@@ -306,14 +306,18 @@ generate link, QR, list/revoke) plus the anonymous **`#/s/<token>`** recipient v
 generated **client-side** with the `qrcode` package (lazy-imported) — the token never reaches a
 third-party QR service. Verified end-to-end in-browser: the recipient route redeems against the live
 backend and renders a clean "no longer available" for an unknown/expired token (410).
-- **View/Download fix (2026-07-10):** the recipient's View/Download are plain **anchor links** pointing
-  at a new backend endpoint `GET /api/public/shares/files/download` (session + fileId in the query),
-  which **302-redirects** to the presigned URL (`Cache-Control: no-store`). Because the browser
-  navigates a new tab synchronously with the click — no `fetch`, no `window.open` after an `await` — the
-  popup blocker never fires. The earlier fetch-then-`window.open` approach blinked-and-failed on desktop
-  (blocked popup) while working on mobile; anchors work identically on both. A GET navigation is also
-  not subject to CORS, sidestepping the custom-header/preflight issues entirely. The `POST` variant
-  (session in body) is kept for programmatic clients.
+- **View/Download (final, 2026-07-10):** the recipient fetches a fresh presigned URL via
+  **`POST /api/public/shares/files/download` with the session in the request body**, then opens it in a
+  tab that was opened **synchronously on the click** (`window.open('about:blank')` before the `await`),
+  navigating that tab to the URL once the fetch resolves. This was arrived at after two dead ends:
+  1. A custom `X-Share-Session` header — stripped by CloudFront (not forwarded) → 401.
+  2. A `GET …/download?session=…&fileId=…` redirect via anchor links — CloudFront's `/api/*` behavior
+     wasn't forwarding **query strings** to the origin either → 401.
+  The body-on-POST transport is the only one proven to survive CloudFront (it's what `redeem` uses).
+  Opening the tab synchronously keeps the popup blocker from firing (the earlier fetch-then-open blinked
+  on desktop). A separate render-loop bug (redeem re-triggered by its own `renderApp`, guarded now to be
+  idempotent per token) had also made the buttons flicker/miss clicks on desktop. A `GET` redirect
+  variant is retained server-side for direct links where query-string forwarding is available.
 
 **Mobile** — owner-side parity screen at `mobile/app/(app)/certificates/share.tsx` (`src/api/share.ts`),
 QR via `react-native-qrcode-svg`, native share sheet for the link. The recipient viewer stays **web-only
