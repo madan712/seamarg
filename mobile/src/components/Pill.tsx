@@ -1,25 +1,59 @@
 // Small status badge mirroring the website's .pill styles (Oswald, tinted
-// background per tone). Used for certificate/document status chips.
+// background per tone). Used for certificate/document/enrollment status chips.
+// Tones ok/warn/due/neutral are kept for existing callers (enrollmentTone,
+// statusTone); valid/expiring/expired/missing/info map onto the same palette
+// with clearer maritime-compliance naming.
 import { StyleSheet, Text, View } from 'react-native';
 
-import { colors, fonts, radius, tracking } from '@/theme';
+import { colors, fonts, radius, status, tracking } from '@/theme';
 
-type Tone = 'ok' | 'warn' | 'due' | 'neutral';
+type Tone =
+  | 'ok'
+  | 'warn'
+  | 'due'
+  | 'neutral'
+  | 'valid'
+  | 'expiring'
+  | 'expired'
+  | 'missing'
+  | 'info';
 
-export function Pill({ label, tone = 'neutral' }: { label: string; tone?: Tone }) {
+const TONES: Record<Tone, { bg: string; color: string }> = {
+  ok: { bg: status.valid.tint, color: colors.successLight },
+  valid: { bg: status.valid.tint, color: colors.successLight },
+  warn: { bg: status.expiring.tint, color: colors.primaryLight },
+  expiring: { bg: status.expiring.tint, color: colors.primaryLight },
+  due: { bg: status.expired.tint, color: colors.dangerLight },
+  expired: { bg: status.expired.tint, color: colors.dangerLight },
+  missing: { bg: status.missing.tint, color: colors.textMuted },
+  info: { bg: 'rgba(159, 196, 212, 0.16)', color: colors.info },
+  neutral: { bg: status.neutral.tint, color: colors.textDim },
+};
+
+export function Pill({ label, tone = 'neutral', dot = false }: { label: string; tone?: Tone; dot?: boolean }) {
+  const spec = TONES[tone];
   return (
-    <View style={[styles.pill, styles[`${tone}Bg`]]}>
-      <Text style={[styles.text, styles[`${tone}Text`]]}>{label}</Text>
+    <View style={[styles.pill, { backgroundColor: spec.bg }]}>
+      {dot ? <View style={[styles.dot, { backgroundColor: spec.color }]} /> : null}
+      <Text style={[styles.text, { color: spec.color }]}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   pill: {
-    borderRadius: radius.lg,
-    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: radius.pill,
+    paddingHorizontal: 11,
     paddingVertical: 5,
     alignSelf: 'flex-start',
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   text: {
     fontFamily: fonts.headingMedium,
@@ -27,12 +61,4 @@ const styles = StyleSheet.create({
     letterSpacing: tracking.tight,
     textTransform: 'uppercase',
   },
-  okBg: { backgroundColor: 'rgba(110, 147, 162, 0.18)' },
-  okText: { color: colors.textMuted },
-  warnBg: { backgroundColor: 'rgba(200, 149, 46, 0.18)' },
-  warnText: { color: colors.primaryLight },
-  dueBg: { backgroundColor: 'rgba(189, 70, 48, 0.22)' },
-  dueText: { color: '#e08572' },
-  neutralBg: { backgroundColor: 'rgba(243, 238, 225, 0.08)' },
-  neutralText: { color: colors.textDim },
 });

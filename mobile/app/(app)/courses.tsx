@@ -7,7 +7,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { SessionExpiredError } from '@/api/client';
 import {
@@ -28,11 +28,15 @@ import {
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { EmptyState } from '@/components/EmptyState';
+import { GradientSurface } from '@/components/GradientSurface';
+import { ListRow } from '@/components/ListRow';
 import { Pill } from '@/components/Pill';
 import { Screen } from '@/components/Screen';
+import { Segmented } from '@/components/Segmented';
 import { Body, ErrorText, Eyebrow, Heading, Muted, NoticeText, Serif, Title } from '@/components/Typography';
 import { normalizeError } from '@/lib/errors';
-import { colors, fonts, palette, radius, spacing, tracking, typography } from '@/theme';
+import { colors, fonts, gradients, radius, sizes, spacing, tracking, typography, withAlpha } from '@/theme';
 
 type Tab = 'find' | 'institutes' | 'mine';
 
@@ -73,9 +77,7 @@ export default function Courses() {
   );
 
   const load = useCallback(() => {
-    if (!session) {
-      return;
-    }
+    if (!session) return;
     setLoading(true);
     setError('');
     Promise.all([fetchCourseTypes(session), fetchInstitutes(session), fetchEnrollments(session)])
@@ -199,217 +201,258 @@ export default function Courses() {
     return (
       <View key={batch.batchId} style={styles.batch}>
         <View style={styles.batchText}>
-          <Body>{showInstitute ? (batch.instituteName ?? batch.courseName ?? '') : `Starts ${batch.startDate}`}</Body>
-          <Muted>
-            {showInstitute ? `Starts ${batch.startDate}` : (batch.mode ?? 'ONSITE')} · {available}/{total} seats
-          </Muted>
+          <Body numberOfLines={1}>
+            {showInstitute ? (batch.instituteName ?? batch.courseName ?? '') : `Starts ${batch.startDate}`}
+          </Body>
+          <View style={styles.batchMeta}>
+            <Ionicons name="calendar-outline" size={13} color={colors.textFaint} />
+            <Muted>
+              {showInstitute ? `${batch.startDate}` : (batch.mode ?? 'ONSITE')} · {available}/{total} seats
+            </Muted>
+          </View>
         </View>
         {active ? (
-          <Pill label={status ?? ''} tone={enrollmentTone(status)} />
+          <Pill label={status ?? ''} tone={enrollmentTone(status)} dot />
         ) : available <= 0 ? (
           <Pill label="Full" tone="due" />
         ) : (
-          <Pressable
-            style={[styles.enrollBtn, busy && styles.dimmed]}
-            disabled={busy}
+          <Button
+            title={busy ? '…' : 'Enroll'}
+            size="sm"
+            fullWidth={false}
+            loading={busy}
             onPress={() => enroll(batch)}
-          >
-            <Body style={styles.enrollLabel}>{busy ? '…' : 'Enroll'}</Body>
-          </Pressable>
+          />
         )}
       </View>
     );
   };
 
   return (
-    <Screen>
-      <View style={styles.header}>
-        <Eyebrow dot>Courses</Eyebrow>
+    <Screen gutter={false} footerSpace={sizes.tabContentBottom}>
+      <GradientSurface colors={gradients.night} style={styles.hero}>
+        <Eyebrow dot style={styles.heroEyebrow}>
+          Courses
+        </Eyebrow>
         <Title>Find & book training</Title>
-        <Serif>Search DG-approved courses, pick a batch that fits your dates, and request your seat.</Serif>
-      </View>
+        <Serif style={styles.heroLede}>
+          Search DG-approved courses, pick a batch that fits your dates, and request your seat.
+        </Serif>
+      </GradientSurface>
 
-      <View style={styles.tabs}>
-        {(
-          [
-            ['find', 'Find'],
-            ['institutes', 'Institutes'],
-            ['mine', 'My enrollments'],
-          ] as [Tab, string][]
-        ).map(([key, label]) => (
-          <Pressable key={key} onPress={() => setTab(key)} style={[styles.tab, tab === key && styles.tabActive]}>
-            <Body style={[styles.tabLabel, tab === key && styles.tabLabelActive]}>{label}</Body>
-          </Pressable>
-        ))}
-      </View>
+      <View style={styles.body}>
+        <Segmented<Tab>
+          value={tab}
+          onChange={setTab}
+          options={[
+            { key: 'find', label: 'Find' },
+            { key: 'institutes', label: 'Institutes' },
+            { key: 'mine', label: 'My seats' },
+          ]}
+        />
 
-      {error ? <ErrorText>{error}</ErrorText> : null}
-      {notice ? <NoticeText>{notice}</NoticeText> : null}
-      {loading ? <ActivityIndicator color={colors.primary} /> : null}
+        {error ? <ErrorText>{error}</ErrorText> : null}
+        {notice ? <NoticeText>{notice}</NoticeText> : null}
 
-      {tab === 'find' ? (
-        <View style={styles.section}>
-          {selectedCourse ? (
-            <View style={styles.detailHead}>
-              <Pressable
-                onPress={() => {
-                  setSelectedCourse(null);
-                  setResults(null);
-                }}
-              >
-                <Body style={styles.back}>← All courses</Body>
-              </Pressable>
-              <Heading>{selectedCourse.name}</Heading>
-              <View style={styles.dateRow}>
-                <TextInput
-                  style={styles.dateInput}
-                  placeholder="From YYYY-MM-DD"
-                  placeholderTextColor={colors.textFaint}
-                  value={from}
-                  onChangeText={setFrom}
-                  autoCapitalize="none"
+        {tab === 'find' ? (
+          <View style={styles.section}>
+            {selectedCourse ? (
+              <View style={styles.section}>
+                <BackLink
+                  label="All courses"
+                  onPress={() => {
+                    setSelectedCourse(null);
+                    setResults(null);
+                  }}
                 />
-                <TextInput
-                  style={styles.dateInput}
-                  placeholder="To YYYY-MM-DD"
-                  placeholderTextColor={colors.textFaint}
-                  value={to}
-                  onChangeText={setTo}
-                  autoCapitalize="none"
-                />
-              </View>
-              <Button title="Search batches" onPress={() => runSearch(selectedCourse)} loading={searching} />
-              <Card style={styles.list}>
+                <Heading>{selectedCourse.name}</Heading>
+                <View style={styles.dateRow}>
+                  <TextInput
+                    style={styles.dateInput}
+                    placeholder="From YYYY-MM-DD"
+                    placeholderTextColor={colors.textFaint}
+                    value={from}
+                    onChangeText={setFrom}
+                    autoCapitalize="none"
+                  />
+                  <TextInput
+                    style={styles.dateInput}
+                    placeholder="To YYYY-MM-DD"
+                    placeholderTextColor={colors.textFaint}
+                    value={to}
+                    onChangeText={setTo}
+                    autoCapitalize="none"
+                  />
+                </View>
+                <Button title="Search batches" icon="search-outline" onPress={() => runSearch(selectedCourse)} loading={searching} />
                 {results && results.length > 0 ? (
-                  results.map((b) => renderBatch(b, true))
+                  <Card style={styles.list}>{results.map((b) => renderBatch(b, true))}</Card>
                 ) : (
-                  <Muted>{searching ? 'Searching…' : 'No open batches match. Try widening the dates.'}</Muted>
+                  <EmptyState
+                    icon="calendar-outline"
+                    title={searching ? 'Searching…' : 'No open batches'}
+                    message={searching ? undefined : 'Try widening the date range to see more batches.'}
+                  />
                 )}
-              </Card>
-            </View>
-          ) : (
-            <>
-              <Heading>Browse the catalogue</Heading>
-              <View style={styles.chips}>
-                {courseTypes.map((type) => (
-                  <Pressable key={type.slug} style={styles.chip} onPress={() => runSearch(type)}>
-                    <Body style={styles.chipText}>{type.name}</Body>
-                  </Pressable>
-                ))}
               </View>
-            </>
-          )}
-        </View>
-      ) : null}
-
-      {tab === 'institutes' ? (
-        <View style={styles.section}>
-          {detail ? (
-            <View style={styles.detailHead}>
-              <Pressable onPress={() => setDetail(null)}>
-                <Body style={styles.back}>← All institutes</Body>
-              </Pressable>
-              <Heading>{detail.name}</Heading>
-              <Muted>{[detail.city, detail.state].filter(Boolean).join(', ')}</Muted>
-              <Card style={styles.list}>
-                {(detail.batches ?? []).length > 0 ? (
-                  detail.batches.map((b) => renderBatch(b, false))
+            ) : (
+              <>
+                <Heading>Browse the catalogue</Heading>
+                {courseTypes.length === 0 && !loading ? (
+                  <Muted>No courses available right now.</Muted>
                 ) : (
-                  <Muted>No open batches at this institute right now.</Muted>
-                )}
-              </Card>
-            </View>
-          ) : detailLoading ? (
-            <ActivityIndicator color={colors.primary} />
-          ) : (
-            <>
-              <TextInput
-                style={styles.search}
-                placeholder="Search institutes…"
-                placeholderTextColor={colors.textFaint}
-                value={instituteQuery}
-                onChangeText={setInstituteQuery}
-                autoCapitalize="none"
-              />
-              <View style={styles.list}>
-                {filteredInstitutes.map((inst) => (
-                  <Card key={inst.id} onPress={() => openInstitute(inst.id)} style={styles.row}>
-                    <View style={styles.rowText}>
-                      <Body>{inst.name}</Body>
-                      <Muted>{[inst.city, inst.state].filter(Boolean).join(', ')}</Muted>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={colors.textFaint} />
-                  </Card>
-                ))}
-              </View>
-            </>
-          )}
-        </View>
-      ) : null}
-
-      {tab === 'mine' ? (
-        <View style={styles.section}>
-          {enrollments.length === 0 ? (
-            <Muted>No enrollments yet. Use Find to request a seat.</Muted>
-          ) : (
-            enrollments.map((e) => {
-              const status = (e.status ?? '').toUpperCase();
-              const canCancel = status === 'PENDING' || status === 'CONFIRMED';
-              const busy = busyBatchId === e.batchId;
-              return (
-                <Card key={e.batchId} style={styles.row}>
-                  <View style={styles.rowText}>
-                    <Body>{e.courseName ?? e.typeSlug}</Body>
-                    <Muted>
-                      {e.instituteName}
-                      {e.startDate ? ` · starts ${e.startDate}` : ''}
-                    </Muted>
-                  </View>
-                  <View style={styles.rowRight}>
-                    <Pill label={e.status ?? ''} tone={enrollmentTone(e.status)} />
-                    {canCancel ? (
-                      <Pressable disabled={busy} onPress={() => cancel(e.batchId)}>
-                        <Body style={styles.cancel}>{busy ? '…' : 'Cancel'}</Body>
+                  <View style={styles.chips}>
+                    {courseTypes.map((type) => (
+                      <Pressable
+                        key={type.slug}
+                        style={styles.courseChip}
+                        onPress={() => runSearch(type)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Search batches for ${type.name}`}
+                      >
+                        <Body style={styles.courseChipText}>{type.name}</Body>
+                        <Ionicons name="arrow-forward" size={14} color={colors.primaryLight} />
                       </Pressable>
-                    ) : null}
+                    ))}
                   </View>
-                </Card>
-              );
-            })
-          )}
-        </View>
-      ) : null}
+                )}
+              </>
+            )}
+          </View>
+        ) : null}
+
+        {tab === 'institutes' ? (
+          <View style={styles.section}>
+            {detail ? (
+              <View style={styles.section}>
+                <BackLink label="All institutes" onPress={() => setDetail(null)} />
+                <Heading>{detail.name}</Heading>
+                <Muted>{[detail.city, detail.state].filter(Boolean).join(', ')}</Muted>
+                {(detail.batches ?? []).length > 0 ? (
+                  <Card style={styles.list}>{detail.batches.map((b) => renderBatch(b, false))}</Card>
+                ) : (
+                  <EmptyState icon="calendar-outline" title="No open batches" message="This institute has no open batches right now." />
+                )}
+              </View>
+            ) : (
+              <>
+                <View style={styles.searchWrap}>
+                  <Ionicons name="search-outline" size={18} color={colors.textFaint} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search institutes…"
+                    placeholderTextColor={colors.textFaint}
+                    value={instituteQuery}
+                    onChangeText={setInstituteQuery}
+                    autoCapitalize="none"
+                  />
+                </View>
+                {filteredInstitutes.length === 0 && !loading ? (
+                  <Muted>No institutes match your search.</Muted>
+                ) : (
+                  <View style={styles.list}>
+                    {filteredInstitutes.map((inst) => (
+                      <ListRow
+                        key={inst.id}
+                        icon="business-outline"
+                        title={inst.name}
+                        subtitle={[inst.city, inst.state].filter(Boolean).join(', ') || 'Institute'}
+                        onPress={() => openInstitute(inst.id)}
+                      />
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        ) : null}
+
+        {tab === 'mine' ? (
+          <View style={styles.section}>
+            {enrollments.length === 0 ? (
+              <EmptyState
+                icon="school-outline"
+                title="No enrollments yet"
+                message="Use Find to search for a course and request your first seat."
+                actionLabel="Find a course"
+                onAction={() => setTab('find')}
+              />
+            ) : (
+              enrollments.map((e) => {
+                const status = (e.status ?? '').toUpperCase();
+                const canCancel = status === 'PENDING' || status === 'CONFIRMED';
+                const busy = busyBatchId === e.batchId;
+                return (
+                  <Card key={e.batchId} style={styles.enrollment}>
+                    <View style={styles.enrollTop}>
+                      <View style={styles.enrollText}>
+                        <Body numberOfLines={1}>{e.courseName ?? e.typeSlug}</Body>
+                        <Muted numberOfLines={1}>
+                          {e.instituteName}
+                          {e.startDate ? ` · starts ${e.startDate}` : ''}
+                        </Muted>
+                      </View>
+                      <Pill label={e.status ?? ''} tone={enrollmentTone(e.status)} dot />
+                    </View>
+                    {canCancel ? (
+                      <Button
+                        title="Cancel enrollment"
+                        variant="danger"
+                        size="sm"
+                        loading={busy}
+                        onPress={() => cancel(e.batchId)}
+                      />
+                    ) : null}
+                  </Card>
+                );
+              })
+            )}
+          </View>
+        ) : null}
+      </View>
     </Screen>
   );
 }
 
+function BackLink({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={styles.back} accessibilityRole="button" accessibilityLabel={`Back to ${label}`}>
+      <Ionicons name="chevron-back" size={16} color={colors.primaryLight} />
+      <Body style={styles.backText}>{label}</Body>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  header: { gap: spacing.sm, marginBottom: spacing.xs },
-  tabs: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
-  tab: {
+  hero: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+    gap: spacing.xs,
+  },
+  heroEyebrow: { marginBottom: spacing.xs },
+  heroLede: { marginTop: spacing.xs, color: colors.textDim },
+  body: { paddingHorizontal: spacing.md, gap: spacing.md, marginTop: spacing.md },
+  section: { gap: spacing.md },
+  chips: { gap: spacing.sm },
+  courseChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingVertical: spacing.md - 2,
+    backgroundColor: colors.surface,
   },
-  tabActive: { borderColor: colors.primary, backgroundColor: 'rgba(200, 149, 46, 0.16)' },
-  tabLabel: { color: colors.textMuted, fontSize: 12 },
-  tabLabelActive: { color: colors.primaryLight },
-  section: { gap: spacing.sm },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: colors.surfaceMuted,
-  },
-  chipText: { fontSize: 13 },
+  courseChipText: { fontSize: 14, flexShrink: 1 },
   list: { gap: spacing.sm, padding: spacing.md },
-  detailHead: { gap: spacing.sm },
-  back: { color: colors.primaryLight },
+  back: { flexDirection: 'row', alignItems: 'center', gap: 2, alignSelf: 'flex-start' },
+  backText: { color: colors.primaryLight, fontFamily: fonts.bodyMedium },
   dateRow: { flexDirection: 'row', gap: spacing.sm },
   dateInput: {
     flex: 1,
@@ -423,35 +466,32 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: typography.body,
   },
-  search: {
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: spacing.sm + 3,
     color: colors.text,
     fontFamily: fonts.body,
     fontSize: typography.body,
   },
-  batch: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  batchText: { gap: 2, flexShrink: 1 },
-  enrollBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+  batch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
-  enrollLabel: {
-    color: palette.deep,
-    fontFamily: fonts.heading,
-    fontSize: 12,
-    letterSpacing: tracking.label,
-    textTransform: 'uppercase',
-  },
-  dimmed: { opacity: 0.55 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  rowText: { gap: 2, flexShrink: 1 },
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  cancel: { color: colors.danger, fontSize: 13 },
+  batchText: { gap: 3, flexShrink: 1 },
+  batchMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  enrollment: { gap: spacing.sm },
+  enrollTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  enrollText: { flex: 1, gap: 2 },
 });

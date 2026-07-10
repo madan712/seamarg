@@ -3,18 +3,19 @@
 // FieldDef, and PUTs the whole section on save.
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator } from 'react-native';
+import { ActivityIndicator, StyleSheet } from 'react-native';
 
 import { SessionExpiredError } from '@/api/client';
 import { fetchProfile, saveProfileSection } from '@/api/profile';
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
-import { ErrorText, NoticeText, Serif } from '@/components/Typography';
+import { ErrorText, Eyebrow, NoticeText, Serif } from '@/components/Typography';
 import { getSection } from '@/features/profile/sections';
 import { normalizeError } from '@/lib/errors';
-import { colors } from '@/theme';
+import { colors, spacing } from '@/theme';
 
 export default function ProfileSectionScreen() {
   const { section: slug } = useLocalSearchParams<{ section: string }>();
@@ -106,6 +107,7 @@ export default function ProfileSectionScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: section.title }} />
+      <Eyebrow dot>Profile section</Eyebrow>
       {section.description ? <Serif>{section.description}</Serif> : null}
       {notice ? <NoticeText>{notice}</NoticeText> : null}
       {error ? <ErrorText>{error}</ErrorText> : null}
@@ -119,20 +121,26 @@ export default function ProfileSectionScreen() {
         </Serif>
       ) : (
         <>
-          {section.fields.map((field) => (
-            <Field
-              key={field.name}
-              label={field.label}
-              value={values[field.name] ?? ''}
-              onChangeText={(text) => setValues((prev) => ({ ...prev, [field.name]: text }))}
-              type={field.type}
-              placeholder={field.placeholder}
-              options={field.options}
-            />
-          ))}
-          <Button title="Save" onPress={onSave} loading={saving} />
+          <Card style={styles.form}>
+            {section.fields.map((field) => (
+              <Field
+                key={field.name}
+                label={field.label}
+                value={values[field.name] ?? ''}
+                onChangeText={(text) => setValues((prev) => ({ ...prev, [field.name]: text }))}
+                type={field.type}
+                placeholder={field.placeholder}
+                options={field.options}
+              />
+            ))}
+          </Card>
+          <Button title="Save changes" icon="checkmark-outline" onPress={onSave} loading={saving} />
         </>
       )}
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  form: { gap: spacing.md },
+});

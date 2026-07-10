@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
 import { Eyebrow, ErrorText, NoticeText, Serif, Title } from '@/components/Typography';
@@ -58,15 +59,18 @@ export default function Confirm() {
       {notice ? <NoticeText>{notice}</NoticeText> : null}
       {error ? <ErrorText>{error}</ErrorText> : null}
 
-      <Field label="Email" value={email} onChangeText={setEmail} type="email" />
-      <Field label="Verification code" value={code} onChangeText={setCode} type="number" autoFocus />
+      <Card style={styles.form}>
+        <Field label="Email" value={email} onChangeText={setEmail} type="email" />
+        <Field label="Verification code" value={code} onChangeText={setCode} type="number" autoFocus />
+      </Card>
 
-      <Button title="Confirm" onPress={onConfirm} loading={busy} />
-      <Button title="Resend code" onPress={onResend} variant="secondary" />
+      <Button title="Confirm" icon="checkmark-circle-outline" onPress={onConfirm} loading={busy} />
+      <Button title="Resend code" onPress={onResend} variant="secondary" icon="mail-outline" />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   header: { gap: spacing.sm, marginBottom: spacing.sm },
+  form: { gap: spacing.md },
 });

@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
 import { Eyebrow, ErrorText, Serif, Title } from '@/components/Typography';
@@ -74,21 +75,27 @@ export default function ForgotPassword() {
 
       {error ? <ErrorText>{error}</ErrorText> : null}
 
-      <Field label="Email" value={email} onChangeText={setEmail} type="email" autoFocus />
-
       {!sent ? (
-        <Button title="Send reset code" onPress={onRequest} loading={busy} />
+        <>
+          <Card style={styles.form}>
+            <Field label="Email" value={email} onChangeText={setEmail} type="email" autoFocus />
+          </Card>
+          <Button title="Send reset code" icon="mail-outline" onPress={onRequest} loading={busy} />
+        </>
       ) : (
         <>
-          <Field label="Reset code" value={code} onChangeText={setCode} type="number" />
-          <Field label="New password" value={password} onChangeText={setPassword} secureTextEntry />
-          <Field
-            label="Confirm new password"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-          />
-          <Button title="Set new password" onPress={onReset} loading={busy} />
+          <Card style={styles.form}>
+            <Field label="Email" value={email} onChangeText={setEmail} type="email" />
+            <Field label="Reset code" value={code} onChangeText={setCode} type="number" />
+            <Field label="New password" value={password} onChangeText={setPassword} secureTextEntry />
+            <Field
+              label="Confirm new password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+            />
+          </Card>
+          <Button title="Set new password" icon="lock-closed-outline" onPress={onReset} loading={busy} />
         </>
       )}
     </Screen>
@@ -97,4 +104,5 @@ export default function ForgotPassword() {
 
 const styles = StyleSheet.create({
   header: { gap: spacing.sm, marginBottom: spacing.sm },
+  form: { gap: spacing.md },
 });

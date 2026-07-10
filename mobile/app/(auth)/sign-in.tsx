@@ -3,7 +3,9 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthContext';
+import { BrandMark } from '@/components/BrandMark';
 import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
 import { Eyebrow, ErrorText, Serif, Title } from '@/components/Typography';
@@ -42,17 +44,20 @@ export default function SignIn() {
   return (
     <Screen>
       <View style={styles.header}>
-        <Eyebrow dot>Seamarg · Seafarer Portal</Eyebrow>
+        <BrandMark />
+        <Eyebrow style={styles.eyebrow}>Seafarer Portal</Eyebrow>
         <Title>Welcome back</Title>
         <Serif>Sign in to manage your profile, documents and certificates.</Serif>
       </View>
 
       {error ? <ErrorText>{error}</ErrorText> : null}
 
-      <Field label="Email" value={email} onChangeText={setEmail} type="email" autoFocus />
-      <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
+      <Card style={styles.form}>
+        <Field label="Email" value={email} onChangeText={setEmail} type="email" autoFocus />
+        <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
+      </Card>
 
-      <Button title="Sign in" onPress={onSubmit} loading={busy} />
+      <Button title="Sign in" icon="log-in-outline" onPress={onSubmit} loading={busy} />
 
       <View style={styles.links}>
         <Link href="/forgot-password" style={styles.link}>
@@ -68,6 +73,8 @@ export default function SignIn() {
 
 const styles = StyleSheet.create({
   header: { gap: spacing.sm, marginBottom: spacing.sm },
+  eyebrow: { marginTop: spacing.xs },
+  form: { gap: spacing.md },
   links: { marginTop: spacing.md, gap: spacing.md, alignItems: 'center' },
   link: { paddingVertical: spacing.xs },
   linkText: { color: colors.primaryLight, fontFamily: fonts.bodyMedium, fontSize: typography.caption },

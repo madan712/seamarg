@@ -9,8 +9,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { GradientSurface } from '@/components/GradientSurface';
+import { IconBadge } from '@/components/IconBadge';
+import { StatTile } from '@/components/StatTile';
 import { Body, Eyebrow, Heading, Muted, Serif, Title } from '@/components/Typography';
-import { colors, fonts, radius, spacing, tracking, typography } from '@/theme';
+import { colors, fonts, gradients, radius, sizes, spacing, tracking, typography } from '@/theme';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -82,7 +85,10 @@ export function Landing() {
       showsVerticalScrollIndicator={false}
     >
       {/* Hero */}
-      <View style={[styles.hero, { paddingTop: insets.top + spacing.lg }]}>
+      <GradientSurface
+        colors={gradients.hero}
+        style={[styles.hero, { paddingTop: insets.top + spacing.lg }]}
+      >
         <View style={styles.ringOuter} />
         <View style={styles.ringInner} />
 
@@ -109,13 +115,10 @@ export function Landing() {
 
         <View style={styles.statGrid}>
           {HERO_STATS.map((stat) => (
-            <View key={stat.label} style={styles.statCell}>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Muted style={styles.statLabel}>{stat.label}</Muted>
-            </View>
+            <StatTile key={stat.label} value={stat.value} label={stat.label} />
           ))}
         </View>
-      </View>
+      </GradientSurface>
 
       {/* Feature keyword strip */}
       <View style={styles.strip}>
@@ -127,10 +130,8 @@ export function Landing() {
       {/* Features */}
       <View style={styles.section}>
         {FEATURES.map((feature) => (
-          <Card key={feature.tag} style={styles.featureCard}>
-            <View style={styles.featureIcon}>
-              <Ionicons name={feature.icon} size={22} color={colors.primaryLight} />
-            </View>
+          <Card key={feature.tag} variant="rail">
+            <IconBadge icon={feature.icon} size={sizes.iconLg} />
             <Eyebrow style={styles.featureTag}>{feature.tag}</Eyebrow>
             <Heading>{feature.title}</Heading>
             <Body style={styles.featureBody}>{feature.body}</Body>
@@ -148,7 +149,7 @@ export function Landing() {
       </View>
 
       {/* Community band */}
-      <View style={styles.community}>
+      <GradientSurface colors={gradients.night} style={styles.community}>
         <Eyebrow dot style={styles.communityEyebrow}>
           The Margo Family
         </Eyebrow>
@@ -161,10 +162,7 @@ export function Landing() {
 
         <View style={styles.crewGrid}>
           {CREW_STATS.map((stat) => (
-            <View key={stat.label} style={styles.crewCell}>
-              <Text style={styles.crewValue}>{stat.value}</Text>
-              <Muted style={styles.statLabel}>{stat.label}</Muted>
-            </View>
+            <StatTile key={stat.label} value={stat.value} label={stat.label} tone="paper" />
           ))}
         </View>
 
@@ -173,7 +171,7 @@ export function Landing() {
           someone watching the dates, the rules, the renewals, while we watch the sea.”
         </Text>
         <Muted style={styles.cite}>— A Seamarg seafarer, between contracts</Muted>
-      </View>
+      </GradientSurface>
 
       {/* CTA band */}
       <View style={styles.ctaBand}>
@@ -267,19 +265,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     flexDirection: 'row',
     flexWrap: 'wrap',
-  },
-  statCell: {
-    width: '50%',
-    paddingVertical: spacing.sm,
-  },
-  statValue: {
-    fontFamily: fonts.heading,
-    fontSize: 18,
-    letterSpacing: tracking.tight,
-    color: colors.primaryLight,
-  },
-  statLabel: {
-    marginTop: 2,
+    gap: spacing.sm,
   },
 
   // Keyword strip
@@ -300,19 +286,6 @@ const styles = StyleSheet.create({
   section: {
     padding: spacing.lg,
     gap: spacing.md,
-  },
-  featureCard: {
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  featureIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.lg,
-    backgroundColor: 'rgba(200, 149, 46, 0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
   },
   featureTag: {
     color: colors.primaryLight,
@@ -362,18 +335,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  crewCell: {
-    width: '50%',
-    paddingVertical: spacing.md,
-  },
-  crewValue: {
-    fontFamily: fonts.headingBold,
-    fontSize: 20,
-    letterSpacing: tracking.tight,
-    color: colors.text,
+    gap: spacing.sm,
   },
   quote: {
     marginTop: spacing.lg,

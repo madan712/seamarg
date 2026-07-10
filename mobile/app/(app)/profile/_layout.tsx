@@ -7,8 +7,9 @@ export default function ProfileStack() {
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: colors.surfaceRaised },
-        headerTintColor: colors.text,
-        headerTitleStyle: { fontFamily: fonts.heading },
+        headerTintColor: colors.primaryLight,
+        headerShadowVisible: false,
+        headerTitleStyle: { fontFamily: fonts.heading, color: colors.text },
         contentStyle: { backgroundColor: colors.background },
       }}
     >

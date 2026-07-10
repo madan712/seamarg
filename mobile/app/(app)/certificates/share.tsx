@@ -21,11 +21,13 @@ import {
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { EmptyState } from '@/components/EmptyState';
 import { Pill } from '@/components/Pill';
 import { Screen } from '@/components/Screen';
-import { Body, ErrorText, Heading, Muted, NoticeText, Serif } from '@/components/Typography';
+import { SectionHeader } from '@/components/SectionHeader';
+import { Body, ErrorText, Eyebrow, Muted, NoticeText, Serif, Title } from '@/components/Typography';
 import { normalizeError } from '@/lib/errors';
-import { colors, palette, spacing } from '@/theme';
+import { colors, fonts, palette, radius, sizes, spacing } from '@/theme';
 import { useFocusEffect } from 'expo-router';
 
 export default function ShareDocuments() {
@@ -128,22 +130,28 @@ export default function ShareDocuments() {
   const shareableCount = files.filter((file) => file.shareable).length;
 
   return (
-    <Screen>
-      <Serif>
-        Choose which uploaded documents can be shared, then generate a secure QR code. The person you
-        share with scans it from any phone — no account needed — and sees only the files you marked
-        shareable. Links expire automatically and can be revoked any time.
-      </Serif>
+    <Screen footerSpace={sizes.tabContentBottom}>
+      <View style={styles.header}>
+        <Eyebrow dot>Secure sharing</Eyebrow>
+        <Title>Share documents</Title>
+        <Serif>
+          Choose which uploaded documents can be shared, then generate a secure QR code. The person you
+          share with scans it from any phone — no account needed — and sees only the files you marked
+          shareable. Links expire automatically and can be revoked any time.
+        </Serif>
+      </View>
 
       {error ? <ErrorText>{error}</ErrorText> : null}
       {notice ? <NoticeText>{notice}</NoticeText> : null}
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
 
-      <Heading>Shareable documents</Heading>
+      <SectionHeader title="Shareable documents" />
       {files.length === 0 && !loading ? (
-        <Muted>
-          You have no uploaded documents yet. Add certificates first, then choose which to share.
-        </Muted>
+        <EmptyState
+          icon="cloud-upload-outline"
+          title="No documents yet"
+          message="Add certificates to your Sea Wallet first, then choose which ones to share."
+        />
       ) : (
         <View style={styles.list}>
           {files.map((file) => (
@@ -165,18 +173,19 @@ export default function ShareDocuments() {
         </View>
       )}
 
-      <Heading>Generate a secure link</Heading>
+      <SectionHeader title="Generate a secure link" />
       <Muted>{shareableCount} document(s) marked shareable.</Muted>
       <Button
         title="Generate secure QR link"
+        icon="qr-code-outline"
         onPress={generate}
         loading={busy}
         disabled={shareableCount === 0}
       />
 
       {lastCreated ? (
-        <Card style={styles.created}>
-          <Heading>Your secure QR link</Heading>
+        <Card variant="elevated" style={styles.created}>
+          <Body style={styles.qrHeading}>Your secure QR link</Body>
           <Muted>
             Anyone who scans this can view your {shareableCount} shareable file(s) until it expires.
           </Muted>
@@ -197,7 +206,7 @@ export default function ShareDocuments() {
 
       {shares.length > 0 ? (
         <>
-          <Heading>Your share links</Heading>
+          <SectionHeader title="Your share links" />
           <View style={styles.list}>
             {shares.map((share) => (
               <Card key={share.shareId} style={styles.shareRow}>
@@ -266,15 +275,17 @@ function formatDateTime(iso: string | null): string {
 }
 
 const styles = StyleSheet.create({
+  header: { gap: spacing.sm, marginBottom: spacing.xs },
   list: { gap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rowText: { gap: 2, flexShrink: 1, paddingRight: spacing.sm },
   created: { alignItems: 'stretch', gap: spacing.sm },
+  qrHeading: { fontFamily: fonts.bodySemiBold, fontSize: 16 },
   qrWrap: {
     alignSelf: 'center',
     padding: spacing.md,
     backgroundColor: palette.paper,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   shareRow: { gap: spacing.xs },
   shareHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
