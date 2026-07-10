@@ -14,6 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 npm workspaces are `frontend`, `mobile`, and `lambda`; the backend is Gradle-only. Import the repo root into IntelliJ as a Gradle project.
 
+`shared/` (repo root, **not** a workspace) holds dependency-free TypeScript consumed by both `frontend/` and `mobile/` via the `@shared/*` path alias — the single source of truth for cross-client data. Currently `shared/certificates.ts` (the certificate catalog: categories, types, extra fields, common entry fields). Frontend resolves it through a Vite `resolve.alias` + `server.fs.allow` (see `frontend/vite.config.ts`) and a tsconfig `paths` entry; mobile through a tsconfig `paths` entry (Metro already watches the repo root). Change catalog data here once — both clients pick it up. Category `slug` values are the backend's `CertificateCategory` slugs and must stay in sync with `backend/.../CertificateCategory.java`.
+
 ## Commands
 
 Java is not on PATH in this environment. Prefix Gradle commands with the Microsoft JDK 21:

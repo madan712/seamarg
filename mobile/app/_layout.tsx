@@ -17,15 +17,30 @@ import {
   Oswald_600SemiBold,
   Oswald_700Bold,
 } from '@expo-google-fonts/oswald';
+import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@/auth/AuthContext';
 import { colors } from '@/theme';
+
+// Dismisses the Add-certificate modal (modals have no back arrow on iOS).
+function CloseButton() {
+  return (
+    <Pressable
+      hitSlop={12}
+      onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+      accessibilityRole="button"
+      accessibilityLabel="Close"
+    >
+      <Ionicons name="close" size={24} color={colors.text} />
+    </Pressable>
+  );
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -64,6 +79,18 @@ export default function RootLayout() {
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="(app)" options={{ headerShown: false }} />
+            {/* Add-certificate is a root-level modal so opening it never becomes
+                part of (and hijacks) the Wallet tab's navigation stack. */}
+            <Stack.Screen
+              name="scan"
+              options={{
+                presentation: 'modal',
+                headerShown: true,
+                title: 'Add certificate',
+                headerTintColor: colors.primaryLight,
+                headerLeft: () => <CloseButton />,
+              }}
+            />
           </Stack>
         </AuthProvider>
       </SafeAreaProvider>

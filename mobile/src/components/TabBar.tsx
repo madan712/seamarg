@@ -68,7 +68,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
 
       <View style={styles.fabSlot}>
         <Pressable
-          onPress={() => router.push('/certificates/scan')}
+          onPress={() => router.push('/scan')}
           style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
           accessibilityRole="button"
           accessibilityLabel="Scan a certificate"

@@ -85,7 +85,7 @@ export default function CertificatesIndex() {
 
       <View style={styles.body}>
         <View style={styles.actions}>
-          <Button title="Scan certificate" icon="scan-outline" onPress={() => router.push('/certificates/scan')} />
+          <Button title="Add certificate" icon="add-circle-outline" onPress={() => router.push('/scan')} />
           <Button
             title="Share documents"
             variant="secondary"
@@ -121,7 +121,7 @@ export default function CertificatesIndex() {
             title="No certificates yet"
             message="Scan your first certificate and we'll read the details for you automatically."
             actionLabel="Scan a certificate"
-            onAction={() => router.push('/certificates/scan')}
+            onAction={() => router.push('/scan')}
           />
         ) : (
           categories.map(([category, types]) => (

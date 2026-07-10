@@ -42,6 +42,27 @@ export type CertificateUploadResult = {
   file?: CertificateFileMeta;
 };
 
+// Persists one certificate entry (CERT#<CATEGORY>#<TYPE>). Mirrors the web's
+// save handler: PUT the field values, optionally nesting the uploaded `file`
+// meta so the file is kept with the entry. `category` is the backend slug
+// (e.g. 'general', 'tanker-passenger'), not the enum name.
+export function saveCertificateEntry(
+  session: AuthSession,
+  category: string,
+  typeSlug: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(
+    `/api/customer/certificates/${category}/${typeSlug}`,
+    session,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 // Uploads a captured/selected image to the entry's file endpoint. The backend
 // stores it under the CERT#<CATEGORY>#<TYPE> payload and runs AI extraction,
 // returning suggested field values. Mirrors handleCertificateFileUpload (web),

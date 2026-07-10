@@ -7,6 +7,11 @@ import {
   type CognitoUserSession,
   type ISignUpResult,
 } from 'amazon-cognito-identity-js';
+import {
+  CERTIFICATE_EXTRA_FIELDS,
+  certificateCatalog,
+  type CertificateType,
+} from '@shared/certificates';
 
 type UserClaims = Record<string, unknown> & {
   email?: string;
@@ -1072,84 +1077,9 @@ const MAIN_DOCUMENTS: { slug: string; label: string }[] = [
 ];
 
 // Step 2 — detailed certificate catalogs (dummy; real reference data loads later).
-type CertificateType = { slug: string; label: string };
-
-const GENERAL_CERTIFICATES: CertificateType[] = [
-  { slug: 'stcw-basic-safety-training', label: 'STCW Basic Safety Training' },
-  { slug: 'proficiency-survival-craft', label: 'Proficiency in Survival Craft & Rescue Boats' },
-  { slug: 'advanced-fire-fighting', label: 'Advanced Fire Fighting' },
-  { slug: 'medical-first-aid', label: 'Medical First Aid' },
-  { slug: 'gmdss-general-operator', label: 'GMDSS General Operator' },
-  { slug: 'ship-security-awareness', label: 'Ship Security Awareness' },
-];
-
-const NCOC_CERTIFICATES: CertificateType[] = [
-  { slug: 'coc-deck', label: 'Certificate of Competency — Deck' },
-  { slug: 'coc-engine', label: 'Certificate of Competency — Engine' },
-  { slug: 'gmdss-radio-operator', label: 'GMDSS Radio Operator' },
-];
-
-const MEDICAL_CERTIFICATES: CertificateType[] = [
-  { slug: 'medical-fitness', label: 'Medical Fitness (ILO/MLC)' },
-  { slug: 'drug-alcohol-test', label: 'Drug & Alcohol Test' },
-  { slug: 'yellow-fever-vaccination', label: 'Yellow Fever Vaccination' },
-];
-
-const TANKER_CERTIFICATES: CertificateType[] = [
-  { slug: 'basic-oil-chemical-tanker', label: 'Basic Training Oil & Chemical Tanker' },
-  { slug: 'advanced-oil-tanker', label: 'Advanced Oil Tanker Operations' },
-  { slug: 'liquefied-gas-tanker', label: 'Liquefied Gas Tanker' },
-  { slug: 'passenger-ship-crowd-management', label: 'Passenger Ship Crowd Management' },
-];
-
-const OFFSHORE_CERTIFICATES: CertificateType[] = [
-  { slug: 'bosiet', label: 'BOSIET' },
-  { slug: 'huet', label: 'HUET' },
-  { slug: 'foet', label: 'FOET' },
-  { slug: 't-bosiet', label: 'T-BOSIET' },
-];
-
-const FLAG_STATE_CERTIFICATES: CertificateType[] = [
-  { slug: 'panama-endorsement', label: 'Panama Flag Endorsement' },
-  { slug: 'liberia-endorsement', label: 'Liberia Flag Endorsement' },
-  { slug: 'marshall-islands-endorsement', label: 'Marshall Islands Flag Endorsement' },
-];
-
-const CERTIFICATE_CATALOGS: Record<string, CertificateType[]> = {
-  general: GENERAL_CERTIFICATES,
-  ncoc: NCOC_CERTIFICATES,
-  medical: MEDICAL_CERTIFICATES,
-  'tanker-passenger': TANKER_CERTIFICATES,
-  offshore: OFFSHORE_CERTIFICATES,
-  'flag-state': FLAG_STATE_CERTIFICATES,
-};
-
-// Dummy COC grades (NCOC only) — real reference data loads later.
-const COC_GRADE_OPTIONS = [
-  'Master',
-  'Chief Mate',
-  'Officer in Charge of a Navigational Watch',
-  'Chief Engineer',
-  'Second Engineer',
-  'Engineer Officer in Charge of a Watch',
-];
-
-// Category-specific fields beyond the common set (PRD §5.3).
-type CertificateExtraField = {
-  key: string;
-  label: string;
-  type: 'text' | 'select';
-  options?: string[];
-  required?: boolean;
-};
-const CERTIFICATE_EXTRA_FIELDS: Record<string, CertificateExtraField[]> = {
-  ncoc: [{ key: 'cocGrade', label: 'COC grade', type: 'select', options: COC_GRADE_OPTIONS, required: true }],
-  medical: [{ key: 'clinicName', label: 'Clinic Name', type: 'text' }],
-};
-
-function certificateCatalog(categorySlug: string): CertificateType[] {
-  return CERTIFICATE_CATALOGS[categorySlug] ?? [];
-}
+// The certificate catalog (categories, types, extra fields, COC grades) now
+// lives in the repo-root shared/ module so the web and mobile clients stay in
+// sync. See imports at the top of this file (@shared/certificates).
 
 // Visas — each has a "held" checkbox plus an expiry date.
 const VISAS: { slug: string; label: string }[] = [
