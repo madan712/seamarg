@@ -1,6 +1,7 @@
 package com.seamarg.backend.share;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -66,6 +67,35 @@ class PublicShareController {
 		var share = shareService.requireActiveShareForSession(firstNonBlank(sessionParam, sessionHeader));
 		var files = shareableFilesService.listShareableFiles(share.ownerSub());
 		return new FilesResponse(share.allowDownload(), files);
+	}
+
+	/**
+	 * Browser-friendly download: a plain GET that 302-redirects to the presigned
+	 * URL. The recipient viewer links its View/Download buttons straight at this
+	 * (as normal anchors), so the browser navigates a new tab synchronously with
+	 * the click — no fetch, no {@code window.open} timing, so nothing for the
+	 * popup blocker to kill. Session + file id ride the query string (a top-level
+	 * navigation, so CORS never applies); the response is {@code no-store} so the
+	 * time-limited presigned URL is never cached/shared.
+	 */
+	@GetMapping("/files/download")
+	ResponseEntity<Void> downloadRedirect(
+			@RequestParam(name = "fileId", required = false) String fileId,
+			@RequestParam(name = "session", required = false) String sessionParam,
+			@RequestParam(name = "download", required = false, defaultValue = "false") boolean download,
+			@RequestHeader(name = ShareSessionService.HEADER, required = false) String sessionHeader) {
+		if (!StringUtils.hasText(fileId)) {
+			throw new ShareGoneException("File is not available.");
+		}
+		var share = shareService.requireActiveShareForSession(firstNonBlank(sessionParam, sessionHeader));
+		var asAttachment = share.allowDownload() && download;
+		var url = shareableFilesService.downloadUrlIfShareable(share.ownerSub(), fileId, asAttachment)
+			.orElseThrow(() -> new ShareGoneException("File is not available."));
+		shareService.recordDownload(share);
+		return ResponseEntity.status(HttpStatus.FOUND)
+			.header(HttpHeaders.LOCATION, url.toString())
+			.header(HttpHeaders.CACHE_CONTROL, "no-store")
+			.build();
 	}
 
 	@PostMapping("/files/download")

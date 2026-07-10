@@ -4113,3 +4113,13 @@ p {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+
+/* Stable hit targets: no hover lift (which can jitter the element out from under
+   the cursor on desktop) and a comfortable min width for the recipient's links. */
+.share-viewer-actions .button {
+  min-width: 120px;
+}
+
+.share-viewer-actions .button:hover {
+  transform: none;
+}

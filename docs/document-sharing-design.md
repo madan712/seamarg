@@ -306,9 +306,14 @@ generate link, QR, list/revoke) plus the anonymous **`#/s/<token>`** recipient v
 generated **client-side** with the `qrcode` package (lazy-imported) — the token never reaches a
 third-party QR service. Verified end-to-end in-browser: the recipient route redeems against the live
 backend and renders a clean "no longer available" for an unknown/expired token (410).
-- **View/Download fix (2026-07-10):** the recipient's download opens the new tab **synchronously inside
-  the click** and only redirects it to the presigned URL once the fetch resolves — opening it after the
-  `await` was treated as an unsolicited popup and blocked (the "it just blinks" symptom).
+- **View/Download fix (2026-07-10):** the recipient's View/Download are plain **anchor links** pointing
+  at a new backend endpoint `GET /api/public/shares/files/download` (session + fileId in the query),
+  which **302-redirects** to the presigned URL (`Cache-Control: no-store`). Because the browser
+  navigates a new tab synchronously with the click — no `fetch`, no `window.open` after an `await` — the
+  popup blocker never fires. The earlier fetch-then-`window.open` approach blinked-and-failed on desktop
+  (blocked popup) while working on mobile; anchors work identically on both. A GET navigation is also
+  not subject to CORS, sidestepping the custom-header/preflight issues entirely. The `POST` variant
+  (session in body) is kept for programmatic clients.
 
 **Mobile** — owner-side parity screen at `mobile/app/(app)/certificates/share.tsx` (`src/api/share.ts`),
 QR via `react-native-qrcode-svg`, native share sheet for the link. The recipient viewer stays **web-only

@@ -323,6 +323,16 @@ class EndpointSecurityTests {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"fileId\":\"does-not-exist\",\"download\":false,\"session\":\"bad-token\"}"))
 			.andExpect(status().isUnauthorized());
+
+		// The browser-facing GET redirect endpoint reads the session from the query string.
+		mockMvc.perform(get("/api/public/shares/files/download")
+				.param("fileId", "does-not-exist")
+				.param("session", sessionToken))
+			.andExpect(status().isGone());
+		mockMvc.perform(get("/api/public/shares/files/download")
+				.param("fileId", "does-not-exist")
+				.param("session", "bad-token"))
+			.andExpect(status().isUnauthorized());
 	}
 
 	@Test
