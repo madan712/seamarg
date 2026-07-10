@@ -354,4 +354,43 @@ class EndpointSecurityTests {
 			.andExpect(jsonPath("$.message").value("Hello from the test admin API"))
 			.andExpect(jsonPath("$.principal").value("test-admin"));
 	}
+
+	@Test
+	void publicCourseCatalogAllowsAnonymousAccess() throws Exception {
+		mockMvc.perform(get("/api/public/courses/catalog"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.categories").isArray());
+	}
+
+	@Test
+	void publicInstituteListAllowsAnonymousAccess() throws Exception {
+		mockMvc.perform(get("/api/public/institutes"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$").isArray());
+	}
+
+	@Test
+	void customerEnrollmentsRequireJwt() throws Exception {
+		mockMvc.perform(get("/api/customer/enrollments")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void customerEnrollmentsAllowJwtAccess() throws Exception {
+		mockMvc.perform(get("/api/customer/enrollments").with(jwt().jwt(token -> token.subject("customer-123"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$").isArray());
+	}
+
+	@Test
+	void adminCourseTypesRequireStaticPassword() throws Exception {
+		mockMvc.perform(get("/api/admin/courses/course-types")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void adminCourseTypesAllowCorrectStaticPassword() throws Exception {
+		mockMvc.perform(get("/api/admin/courses/course-types")
+			.header(AdminPasswordAuthenticationFilter.ADMIN_PASSWORD_HEADER, "test-admin-password"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$").isArray());
+	}
 }

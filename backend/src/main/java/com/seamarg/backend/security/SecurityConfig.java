@@ -63,7 +63,7 @@ public class SecurityConfig {
 			.map(String::trim)
 			.filter(StringUtils::hasText)
 			.toList());
-		configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "OPTIONS"));
+		configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
 		configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type",
 			AdminPasswordAuthenticationFilter.ADMIN_PASSWORD_HEADER,
 			// Share-session token an anonymous recipient sends after redeeming a

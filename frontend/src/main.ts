@@ -141,10 +141,11 @@ const privateSteps: PrivateStep[] = [
     path: '/courses',
     label: 'Courses',
     icon: '🎓',
-    // Placeholder step — the course-booking workspace is built in a later phase.
-    // Any sub-page that has no explicit renderer falls back to the "coming soon"
-    // placeholder in renderPrivateSubPageBody.
-    subPages: [{ slug: 'guide', label: 'Course booking', icon: '🎓' }],
+    subPages: [
+      { slug: 'find', label: 'Find a course', icon: '🔍' },
+      { slug: 'institutes', label: 'Browse institutes', icon: '🏫' },
+      { slug: 'enrollments', label: 'My enrollments', icon: '🎫' },
+    ],
   },
   {
     path: '/sea-service',
@@ -365,6 +366,598 @@ function resetCertificatesState(): void {
   };
   expandedCertificates.clear();
   certificateDrafts.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Courses (docs/courses-design.md). Public discovery of institutes → courses →
+// scheduled batches with a request→confirm enrollment flow. The web portal
+// surfaces browse/search/enroll to logged-in seafarers; the same catalog is
+// exposed unauthenticated on /api/public/** for mobile/marketing.
+// ---------------------------------------------------------------------------
+type CourseTypeView = {
+  slug: string;
+  name: string;
+  category?: string;
+  description?: string;
+};
+
+type InstituteSummary = {
+  id: string;
+  name: string;
+  dgsCode?: string;
+  approvalStatus?: string;
+  city?: string;
+  state?: string;
+  website?: string;
+  notes?: string;
+};
+
+type OfferingView = {
+  instituteId: string;
+  instituteName?: string;
+  typeSlug: string;
+  courseName?: string;
+  category?: string;
+};
+
+type BatchView = {
+  batchId: string;
+  instituteId: string;
+  instituteName?: string;
+  state?: string;
+  typeSlug: string;
+  courseName?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  mode?: string;
+  fees?: string;
+  totalSeats?: number;
+  confirmedSeats?: number;
+  availableSeats?: number;
+};
+
+type InstituteDetail = InstituteSummary & {
+  offerings: OfferingView[];
+  batches: BatchView[];
+};
+
+type CourseDetail = CourseTypeView & {
+  offerings: OfferingView[];
+  batches: BatchView[];
+};
+
+type EnrollmentView = {
+  sub?: string;
+  batchId: string;
+  instituteId?: string;
+  instituteName?: string;
+  typeSlug?: string;
+  courseName?: string;
+  startDate?: string;
+  status?: string;
+  createdAt?: string;
+  note?: string;
+};
+
+type CoursesState = {
+  loadedForSubject: string | null;
+  loading: boolean;
+  error: string;
+  courseTypes: CourseTypeView[];
+  institutes: InstituteSummary[];
+  enrollments: EnrollmentView[];
+  searchResults: BatchView[] | null;
+  searching: boolean;
+  selectedInstitute: InstituteDetail | null;
+  selectedCourse: CourseDetail | null;
+  detailLoading: boolean;
+  busyBatchId: string | null;
+};
+
+let coursesState: CoursesState = {
+  loadedForSubject: null,
+  loading: false,
+  error: '',
+  courseTypes: [],
+  institutes: [],
+  enrollments: [],
+  searchResults: null,
+  searching: false,
+  selectedInstitute: null,
+  selectedCourse: null,
+  detailLoading: false,
+  busyBatchId: null,
+};
+
+function resetCoursesState(): void {
+  coursesState = {
+    loadedForSubject: null,
+    loading: false,
+    error: '',
+    courseTypes: [],
+    institutes: [],
+    enrollments: [],
+    searchResults: null,
+    searching: false,
+    selectedInstitute: null,
+    selectedCourse: null,
+    detailLoading: false,
+    busyBatchId: null,
+  };
+}
+
+async function loadCoursesFromApi(session: AuthSession, force = false): Promise<void> {
+  const subject = claimToString(session.claims.sub) ?? 'anonymous';
+  if (!force && coursesState.loadedForSubject === subject) {
+    return;
+  }
+
+  coursesState = { ...coursesState, loading: true, loadedForSubject: subject, error: '' };
+  renderApp();
+
+  try {
+    const [courseTypes, institutes, enrollments] = await Promise.all([
+      apiRequest<CourseTypeView[]>('/api/public/courses', session),
+      apiRequest<InstituteSummary[]>('/api/public/institutes', session),
+      apiRequest<EnrollmentView[]>('/api/customer/enrollments', session),
+    ]);
+    coursesState = {
+      ...coursesState,
+      loading: false,
+      courseTypes: courseTypes ?? [],
+      institutes: institutes ?? [],
+      enrollments: enrollments ?? [],
+      error: '',
+    };
+  } catch (error) {
+    coursesState = { ...coursesState, loading: false, error: normalizeError(error).message };
+  }
+
+  renderApp();
+}
+
+async function reloadEnrollments(session: AuthSession): Promise<void> {
+  try {
+    const enrollments = await apiRequest<EnrollmentView[]>('/api/customer/enrollments', session);
+    coursesState = { ...coursesState, enrollments: enrollments ?? [] };
+  } catch {
+    // Leave the previous list in place; the action notice already surfaced any error.
+  }
+}
+
+async function searchCourseBatches(
+  session: AuthSession,
+  typeSlug: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  if (!typeSlug) {
+    coursesState = { ...coursesState, searchResults: [] };
+    renderApp();
+    return;
+  }
+  coursesState = { ...coursesState, searching: true };
+  renderApp();
+  const params = new URLSearchParams({ course: typeSlug, openOnly: 'true' });
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  try {
+    const results = await apiRequest<BatchView[]>(`/api/public/batches/search?${params.toString()}`, session);
+    coursesState = { ...coursesState, searching: false, searchResults: results ?? [] };
+  } catch (error) {
+    coursesState = { ...coursesState, searching: false, searchResults: [] };
+    portalNotice = { path: getCurrentPath(), message: normalizeError(error).message, kind: 'error' };
+  }
+  renderApp();
+}
+
+async function openInstituteDetail(session: AuthSession, instituteId: string): Promise<void> {
+  coursesState = { ...coursesState, detailLoading: true, selectedInstitute: null, selectedCourse: null };
+  renderApp();
+  try {
+    const detail = await apiRequest<InstituteDetail>(
+      `/api/public/institutes/${encodeURIComponent(instituteId)}`,
+      session,
+    );
+    coursesState = { ...coursesState, detailLoading: false, selectedInstitute: detail };
+  } catch (error) {
+    coursesState = { ...coursesState, detailLoading: false };
+    portalNotice = { path: getCurrentPath(), message: normalizeError(error).message, kind: 'error' };
+  }
+  renderApp();
+}
+
+async function openCourseDetail(session: AuthSession, typeSlug: string): Promise<void> {
+  coursesState = { ...coursesState, detailLoading: true, selectedCourse: null, selectedInstitute: null };
+  renderApp();
+  try {
+    const detail = await apiRequest<CourseDetail>(
+      `/api/public/courses/${encodeURIComponent(typeSlug)}`,
+      session,
+    );
+    coursesState = { ...coursesState, detailLoading: false, selectedCourse: detail };
+  } catch (error) {
+    coursesState = { ...coursesState, detailLoading: false };
+    portalNotice = { path: getCurrentPath(), message: normalizeError(error).message, kind: 'error' };
+  }
+  renderApp();
+}
+
+function coursesClearDetail(): void {
+  coursesState = { ...coursesState, selectedInstitute: null, selectedCourse: null };
+  renderApp();
+}
+
+async function enrollInBatch(
+  session: AuthSession,
+  instituteId: string,
+  typeSlug: string,
+  batchId: string,
+): Promise<void> {
+  const path = getCurrentPath();
+  coursesState = { ...coursesState, busyBatchId: batchId };
+  portalNotice = { path, message: 'Requesting enrollment…', kind: 'info' };
+  renderApp();
+  try {
+    await apiRequest('/api/customer/enrollments', session, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instituteId, typeSlug, batchId }),
+    });
+    await reloadEnrollments(session);
+    // Refresh whichever detail is open so seat/status reflects the new request.
+    if (coursesState.selectedInstitute) {
+      await openInstituteDetail(session, coursesState.selectedInstitute.id);
+    } else if (coursesState.selectedCourse) {
+      await openCourseDetail(session, coursesState.selectedCourse.slug);
+    }
+    coursesState = { ...coursesState, busyBatchId: null };
+    portalNotice = { path, message: 'Enrollment requested — awaiting institute confirmation.', kind: 'success' };
+  } catch (error) {
+    coursesState = { ...coursesState, busyBatchId: null };
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+  renderApp();
+}
+
+async function cancelEnrollment(session: AuthSession, batchId: string): Promise<void> {
+  const path = getCurrentPath();
+  coursesState = { ...coursesState, busyBatchId: batchId };
+  renderApp();
+  try {
+    await apiRequest(`/api/customer/enrollments/${encodeURIComponent(batchId)}`, session, {
+      method: 'DELETE',
+    });
+    await reloadEnrollments(session);
+    portalNotice = { path, message: 'Enrollment cancelled.', kind: 'success' };
+  } catch (error) {
+    portalNotice = { path, message: normalizeError(error).message, kind: 'error' };
+  }
+  coursesState = { ...coursesState, busyBatchId: null };
+  renderApp();
+}
+
+function enrollmentStatusFor(batchId: string): string | null {
+  const match = coursesState.enrollments.find((entry) => entry.batchId === batchId);
+  return match?.status ?? null;
+}
+
+function courseStatusBadge(status: string | null | undefined): string {
+  const value = (status ?? '').toUpperCase();
+  const label =
+    value === 'CONFIRMED'
+      ? 'Confirmed'
+      : value === 'PENDING'
+        ? 'Pending'
+        : value === 'REJECTED'
+          ? 'Rejected'
+          : value === 'CANCELLED'
+            ? 'Cancelled'
+            : status ?? '';
+  const cls = value ? `course-badge course-badge-${value.toLowerCase()}` : 'course-badge';
+  return `<span class="${cls}">${escapeHtml(label)}</span>`;
+}
+
+function renderCoursesLoadError(): string {
+  return `
+    <div class="alert alert-error course-alert">
+      <span>Could not load courses: ${escapeHtml(coursesState.error)}</span>
+      <button class="button button-ghost" type="button" data-action="retry-courses">Retry</button>
+    </div>
+  `;
+}
+
+function renderCourseBatchCard(batch: BatchView, context: 'search' | 'detail'): string {
+  const available = typeof batch.availableSeats === 'number' ? batch.availableSeats : 0;
+  const total = typeof batch.totalSeats === 'number' ? batch.totalSeats : 0;
+  const status = enrollmentStatusFor(batch.batchId);
+  const seatsText = `${available} of ${total} seats left`;
+  const soldOut = available <= 0;
+  const busy = coursesState.busyBatchId === batch.batchId;
+
+  let actionHtml: string;
+  if (status && status.toUpperCase() !== 'CANCELLED' && status.toUpperCase() !== 'REJECTED') {
+    actionHtml = courseStatusBadge(status);
+  } else if (soldOut) {
+    actionHtml = `<span class="course-badge course-badge-full">Full</span>`;
+  } else {
+    actionHtml = `<button class="button button-primary course-enroll-btn" type="button"
+        data-action="course-enroll"
+        data-institute-id="${escapeHtml(batch.instituteId)}"
+        data-type-slug="${escapeHtml(batch.typeSlug)}"
+        data-batch-id="${escapeHtml(batch.batchId)}"
+        ${busy ? 'disabled' : ''}>${busy ? 'Requesting…' : 'Enroll'}</button>`;
+  }
+
+  const showInstitute = context === 'search' || context === 'detail';
+  const heading =
+    context === 'search'
+      ? `${escapeHtml(batch.courseName ?? batch.typeSlug)}`
+      : `Batch starting ${escapeHtml(batch.startDate ?? '')}`;
+  const subline = showInstitute
+    ? `<p class="course-batch-sub">${escapeHtml(batch.instituteName ?? '')}${
+        batch.state ? ` · ${escapeHtml(batch.state)}` : ''
+      }</p>`
+    : '';
+
+  return `
+    <div class="course-batch-card">
+      <div class="course-batch-main">
+        <h4>${heading}</h4>
+        ${subline}
+        <p class="course-batch-meta">
+          <span>📅 Starts ${escapeHtml(batch.startDate ?? 'TBA')}</span>
+          <span>🪑 ${escapeHtml(seatsText)}</span>
+          ${batch.mode ? `<span>📍 ${escapeHtml(batch.mode)}</span>` : ''}
+        </p>
+      </div>
+      <div class="course-batch-action">${actionHtml}</div>
+    </div>
+  `;
+}
+
+function renderCoursesFind(session: AuthSession | null): string {
+  if (!session) {
+    return '';
+  }
+  if (coursesState.loading) {
+    return `<p class="portal-placeholder-note">Loading courses…</p>`;
+  }
+  if (coursesState.error) {
+    return renderCoursesLoadError();
+  }
+  if (coursesState.selectedCourse) {
+    return renderCourseDetail(coursesState.selectedCourse);
+  }
+
+  const options = coursesState.courseTypes
+    .map((type) => `<option value="${escapeHtml(type.slug)}">${escapeHtml(type.name)}</option>`)
+    .join('');
+
+  const results = coursesState.searchResults;
+  let resultsHtml: string;
+  if (coursesState.searching) {
+    resultsHtml = `<p class="portal-placeholder-note">Searching batches…</p>`;
+  } else if (results === null) {
+    resultsHtml = `<p class="portal-placeholder-note">Choose a course and dates, then search for available batches.</p>`;
+  } else if (results.length === 0) {
+    resultsHtml = `<p class="portal-placeholder-note">No open batches match your search. Try widening the dates.</p>`;
+  } else {
+    resultsHtml = `<div class="course-batch-list">${results
+      .map((batch) => renderCourseBatchCard(batch, 'search'))
+      .join('')}</div>`;
+  }
+
+  const catalog = coursesState.courseTypes
+    .map(
+      (type) => `
+      <button class="course-chip" type="button" data-action="course-open-course"
+        data-course-slug="${escapeHtml(type.slug)}">
+        ${escapeHtml(type.name)}
+      </button>`,
+    )
+    .join('');
+
+  return `
+    <form id="course-search-form" class="course-search-card portal-card">
+      <div class="course-search-row">
+        <label class="field">
+          <span>Course</span>
+          <select name="course" required>
+            <option value="">Select a course…</option>
+            ${options}
+          </select>
+        </label>
+        <label class="field">
+          <span>From</span>
+          <input type="date" name="from" />
+        </label>
+        <label class="field">
+          <span>To</span>
+          <input type="date" name="to" />
+        </label>
+        <div class="course-search-actions">
+          <button class="button button-primary" type="submit">Search batches</button>
+        </div>
+      </div>
+    </form>
+
+    <section class="course-results">${resultsHtml}</section>
+
+    <section class="course-catalog">
+      <h3>Browse the catalogue</h3>
+      <div class="course-chip-grid">${catalog || '<p class="portal-placeholder-note">The course catalogue is empty.</p>'}</div>
+    </section>
+  `;
+}
+
+function renderCourseDetail(course: CourseDetail): string {
+  const batches = course.batches ?? [];
+  const institutes = new Map<string, string>();
+  (course.offerings ?? []).forEach((offering) => {
+    institutes.set(offering.instituteId, offering.instituteName ?? offering.instituteId);
+  });
+  const instituteChips = Array.from(institutes.entries())
+    .map(
+      ([id, name]) =>
+        `<button class="course-chip" type="button" data-action="course-open-institute" data-institute-id="${escapeHtml(
+          id,
+        )}">${escapeHtml(name)}</button>`,
+    )
+    .join('');
+
+  const batchesHtml =
+    batches.length > 0
+      ? `<div class="course-batch-list">${batches
+          .map((batch) => renderCourseBatchCard(batch, 'search'))
+          .join('')}</div>`
+      : `<p class="portal-placeholder-note">No open batches for this course right now.</p>`;
+
+  return `
+    <button class="button button-ghost course-back" type="button" data-action="course-back">← Back</button>
+    <div class="course-detail-head">
+      <p class="eyebrow">${escapeHtml(course.category ?? 'Course')}</p>
+      <h2>${escapeHtml(course.name)}</h2>
+      ${course.description ? `<p class="course-detail-desc">${escapeHtml(course.description)}</p>` : ''}
+    </div>
+    <section class="course-detail-section">
+      <h3>Available batches</h3>
+      ${batchesHtml}
+    </section>
+    ${
+      instituteChips
+        ? `<section class="course-detail-section"><h3>Offered by</h3><div class="course-chip-grid">${instituteChips}</div></section>`
+        : ''
+    }
+  `;
+}
+
+function renderCoursesInstitutes(session: AuthSession | null): string {
+  if (!session) {
+    return '';
+  }
+  if (coursesState.loading) {
+    return `<p class="portal-placeholder-note">Loading institutes…</p>`;
+  }
+  if (coursesState.error) {
+    return renderCoursesLoadError();
+  }
+  if (coursesState.detailLoading) {
+    return `<p class="portal-placeholder-note">Loading institute…</p>`;
+  }
+  if (coursesState.selectedInstitute) {
+    return renderInstituteDetail(coursesState.selectedInstitute);
+  }
+
+  const rows = coursesState.institutes
+    .map((inst) => {
+      const search = `${inst.name} ${inst.city ?? ''} ${inst.state ?? ''}`.toLowerCase();
+      return `
+      <button class="course-institute-row" type="button" data-action="course-open-institute"
+        data-institute-id="${escapeHtml(inst.id)}" data-search="${escapeHtml(search)}">
+        <span class="course-institute-name">${escapeHtml(inst.name)}</span>
+        <span class="course-institute-loc">${escapeHtml([inst.city, inst.state].filter(Boolean).join(', '))}</span>
+      </button>`;
+    })
+    .join('');
+
+  return `
+    <div class="course-institute-search">
+      <input type="search" id="course-institute-search" placeholder="Search institutes by name, city or state…" />
+    </div>
+    <div class="course-institute-list">
+      ${rows || '<p class="portal-placeholder-note">No institutes are available yet.</p>'}
+    </div>
+  `;
+}
+
+function renderInstituteDetail(inst: InstituteDetail): string {
+  const batches = inst.batches ?? [];
+  const offerings = inst.offerings ?? [];
+  const offeringChips = offerings
+    .map(
+      (offering) =>
+        `<button class="course-chip" type="button" data-action="course-open-course" data-course-slug="${escapeHtml(
+          offering.typeSlug,
+        )}">${escapeHtml(offering.courseName ?? offering.typeSlug)}</button>`,
+    )
+    .join('');
+
+  const batchesHtml =
+    batches.length > 0
+      ? `<div class="course-batch-list">${batches
+          .map((batch) => renderCourseBatchCard(batch, 'detail'))
+          .join('')}</div>`
+      : `<p class="portal-placeholder-note">No open batches at this institute right now.</p>`;
+
+  const website = inst.website
+    ? `<a class="course-detail-link" href="${escapeHtml(inst.website)}" target="_blank" rel="noopener">Visit website ↗</a>`
+    : '';
+
+  return `
+    <button class="button button-ghost course-back" type="button" data-action="course-back">← Back</button>
+    <div class="course-detail-head">
+      <p class="eyebrow">${escapeHtml([inst.city, inst.state].filter(Boolean).join(', '))}</p>
+      <h2>${escapeHtml(inst.name)}</h2>
+      ${inst.dgsCode ? `<p class="course-detail-desc">DGS Code: ${escapeHtml(inst.dgsCode)}</p>` : ''}
+      ${website}
+    </div>
+    ${
+      offeringChips
+        ? `<section class="course-detail-section"><h3>Courses offered</h3><div class="course-chip-grid">${offeringChips}</div></section>`
+        : ''
+    }
+    <section class="course-detail-section">
+      <h3>Upcoming batches</h3>
+      ${batchesHtml}
+    </section>
+  `;
+}
+
+function renderCoursesEnrollments(session: AuthSession | null): string {
+  if (!session) {
+    return '';
+  }
+  if (coursesState.loading) {
+    return `<p class="portal-placeholder-note">Loading your enrollments…</p>`;
+  }
+  if (coursesState.error) {
+    return renderCoursesLoadError();
+  }
+  const enrollments = coursesState.enrollments;
+  if (enrollments.length === 0) {
+    return `<p class="portal-placeholder-note">You have not requested any enrollments yet. Use <strong>Find a course</strong> to get started.</p>`;
+  }
+
+  const rows = enrollments
+    .map((entry) => {
+      const status = (entry.status ?? '').toUpperCase();
+      const canCancel = status === 'PENDING' || status === 'CONFIRMED';
+      const busy = coursesState.busyBatchId === entry.batchId;
+      const cancelBtn = canCancel
+        ? `<button class="button button-ghost" type="button" data-action="course-cancel-enrollment"
+            data-batch-id="${escapeHtml(entry.batchId)}" ${busy ? 'disabled' : ''}>${
+            busy ? 'Cancelling…' : 'Cancel'
+          }</button>`
+        : '';
+      return `
+      <div class="course-enrollment-row">
+        <div>
+          <h4>${escapeHtml(entry.courseName ?? entry.typeSlug ?? '')}</h4>
+          <p class="course-batch-sub">${escapeHtml(entry.instituteName ?? '')}${
+            entry.startDate ? ` · starts ${escapeHtml(entry.startDate)}` : ''
+          }</p>
+        </div>
+        <div class="course-enrollment-status">
+          ${courseStatusBadge(entry.status)}
+          ${cancelBtn}
+        </div>
+      </div>`;
+    })
+    .join('');
+
+  return `<div class="course-enrollment-list">${rows}</div>`;
 }
 
 // Dummy option lists — replaced with real reference data later (PRD §9).
@@ -1683,6 +2276,7 @@ function signOut(): void {
   clearSession();
   resetProfileState();
   resetCertificatesState();
+  resetCoursesState();
   resetShareState();
   setPath('/');
   renderApp();
@@ -1810,6 +2404,68 @@ let adminState: AdminState = {
   busyFileId: null,
 };
 
+// Admin console tab + Courses management state (docs/courses-design.md §5.3).
+let adminTab: 'users' | 'courses' | 'enrollments' = 'users';
+
+type AdminEnrollmentsState = {
+  loaded: boolean;
+  loading: boolean;
+  error: string;
+  filter: string; // '' = all, else PENDING/CONFIRMED/REJECTED/CANCELLED
+  items: EnrollmentView[];
+  busyKey: string | null; // `${sub}:${batchId}` while approving/rejecting
+  notice: string;
+  noticeKind: NoticeKind;
+};
+
+let adminEnrollments: AdminEnrollmentsState = {
+  loaded: false,
+  loading: false,
+  error: '',
+  filter: '',
+  items: [],
+  busyKey: null,
+  notice: '',
+  noticeKind: 'info',
+};
+
+// Enrollment counts shown as dashboard stat cards (pending / confirmed).
+let adminEnrollmentStats = { loaded: false, loading: false, pending: 0, confirmed: 0 };
+
+type AdminCoursesState = {
+  loaded: boolean;
+  loading: boolean;
+  error: string;
+  importing: boolean;
+  courseTypes: CourseTypeView[];
+  institutes: InstituteSummary[];
+  selectedInstitute: InstituteDetail | null;
+  detailLoading: boolean;
+  rosterBatchId: string | null;
+  roster: EnrollmentView[];
+  rosterLoading: boolean;
+  notice: string;
+  noticeKind: NoticeKind;
+  busy: boolean;
+};
+
+let adminCourses: AdminCoursesState = {
+  loaded: false,
+  loading: false,
+  error: '',
+  importing: false,
+  courseTypes: [],
+  institutes: [],
+  selectedInstitute: null,
+  detailLoading: false,
+  rosterBatchId: null,
+  roster: [],
+  rosterLoading: false,
+  notice: '',
+  noticeKind: 'info',
+  busy: false,
+};
+
 const PROFILE_SECTION_TITLES: Record<string, string> = {
   main: 'Main information',
   contact: 'Contact details',
@@ -1886,6 +2542,728 @@ function adminSignOut(): void {
     busyFileId: null,
   };
   renderApp();
+}
+
+// --------------------------------------------------------------------------
+// Admin console — Courses management (docs/courses-design.md §5.3).
+// --------------------------------------------------------------------------
+async function adminCourseVoid(path: string, init: RequestInit = {}): Promise<void> {
+  if (!adminState.password) {
+    throw new Error('Admin session expired. Sign in again.');
+  }
+  const headers = new Headers(init.headers);
+  headers.set('X-Admin-Password', adminState.password);
+  const response = await fetch(`${config.apiBaseUrl}${path}`, { ...init, headers });
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+}
+
+function setAdminCourseNotice(message: string, kind: NoticeKind = 'info'): void {
+  adminCourses = { ...adminCourses, notice: message, noticeKind: kind };
+}
+
+async function loadAdminCourses(force = false): Promise<void> {
+  // Guard against re-entry: bindAdminPage runs on every render, and this loader
+  // calls renderApp() while in flight, so without the loading check it would
+  // recurse into a tight render loop before the first fetch resolves.
+  if (adminCourses.loading) {
+    return;
+  }
+  if (adminCourses.loaded && !force) {
+    return;
+  }
+  adminCourses = { ...adminCourses, loading: true, error: '' };
+  renderApp();
+  try {
+    const [courseTypes, institutes] = await Promise.all([
+      adminApiRequest<CourseTypeView[]>('/api/admin/courses/course-types'),
+      adminApiRequest<InstituteSummary[]>('/api/admin/courses/institutes'),
+    ]);
+    adminCourses = {
+      ...adminCourses,
+      loaded: true,
+      loading: false,
+      courseTypes: courseTypes ?? [],
+      institutes: institutes ?? [],
+    };
+  } catch (error) {
+    adminCourses = { ...adminCourses, loading: false, error: normalizeError(error).message };
+  }
+  renderApp();
+}
+
+async function adminImportSeed(): Promise<void> {
+  adminCourses = { ...adminCourses, importing: true };
+  setAdminCourseNotice('Importing institutes and course catalogue…', 'info');
+  renderApp();
+  try {
+    const summary = await adminApiRequest<{
+      courseTypes: number;
+      institutes: number;
+      activeInstitutes: number;
+      offerings: number;
+      batches: number;
+    }>('/api/admin/courses/import/institutes', { method: 'POST' });
+    setAdminCourseNotice(
+      `Imported ${summary.institutes} institutes (${summary.activeInstitutes} active), ${summary.courseTypes} course types, ${summary.offerings} offerings, ${summary.batches} demo batches.`,
+      'success',
+    );
+    adminCourses = { ...adminCourses, importing: false };
+    await loadAdminCourses(true);
+  } catch (error) {
+    adminCourses = { ...adminCourses, importing: false };
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+    renderApp();
+  }
+}
+
+async function adminOpenInstitute(instituteId: string): Promise<void> {
+  adminCourses = {
+    ...adminCourses,
+    detailLoading: true,
+    selectedInstitute: null,
+    rosterBatchId: null,
+    roster: [],
+  };
+  renderApp();
+  try {
+    const detail = await adminApiRequest<InstituteDetail>(
+      `/api/admin/courses/institutes/${encodeURIComponent(instituteId)}`,
+    );
+    adminCourses = { ...adminCourses, detailLoading: false, selectedInstitute: detail };
+  } catch (error) {
+    adminCourses = { ...adminCourses, detailLoading: false };
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+  }
+  renderApp();
+}
+
+function adminCloseInstitute(): void {
+  adminCourses = { ...adminCourses, selectedInstitute: null, rosterBatchId: null, roster: [] };
+  renderApp();
+}
+
+async function adminReloadInstitute(): Promise<void> {
+  if (adminCourses.selectedInstitute) {
+    await adminOpenInstitute(adminCourses.selectedInstitute.id);
+  }
+}
+
+async function adminToggleInstituteActive(instituteId: string, active: boolean): Promise<void> {
+  try {
+    await adminApiRequest(`/api/admin/courses/institutes/${encodeURIComponent(instituteId)}/active`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active }),
+    });
+    await loadAdminCourses(true);
+    await adminReloadInstitute();
+  } catch (error) {
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+    renderApp();
+  }
+}
+
+async function adminSaveBatch(form: HTMLFormElement): Promise<void> {
+  const instituteId = form.dataset.instituteId ?? '';
+  const typeSlug = getFormValue(form, 'typeSlug');
+  const startDate = getFormValue(form, 'startDate');
+  const totalSeats = getFormValue(form, 'totalSeats');
+  if (!instituteId || !typeSlug || !startDate || !totalSeats) {
+    setAdminCourseNotice('Course, start date and seats are required for a batch.', 'error');
+    renderApp();
+    return;
+  }
+  try {
+    await adminApiRequest(`/api/admin/courses/institutes/${encodeURIComponent(instituteId)}/batches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ typeSlug, startDate, totalSeats: Number(totalSeats), status: 'OPEN' }),
+    });
+    setAdminCourseNotice('Batch added.', 'success');
+    await adminReloadInstitute();
+  } catch (error) {
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+    renderApp();
+  }
+}
+
+async function adminSetBatchStatus(
+  instituteId: string,
+  typeSlug: string,
+  batchId: string,
+  status: string,
+): Promise<void> {
+  try {
+    await adminApiRequest(
+      `/api/admin/courses/institutes/${encodeURIComponent(instituteId)}/batches/${encodeURIComponent(
+        typeSlug,
+      )}/${encodeURIComponent(batchId)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ typeSlug, status }),
+      },
+    );
+    await adminReloadInstitute();
+  } catch (error) {
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+    renderApp();
+  }
+}
+
+async function adminDeleteBatch(instituteId: string, typeSlug: string, batchId: string): Promise<void> {
+  if (!window.confirm('Delete this batch? Enrollment requests for it will be orphaned.')) {
+    return;
+  }
+  try {
+    await adminCourseVoid(
+      `/api/admin/courses/institutes/${encodeURIComponent(instituteId)}/batches/${encodeURIComponent(
+        typeSlug,
+      )}/${encodeURIComponent(batchId)}`,
+      { method: 'DELETE' },
+    );
+    setAdminCourseNotice('Batch deleted.', 'success');
+    await adminReloadInstitute();
+  } catch (error) {
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+    renderApp();
+  }
+}
+
+async function adminToggleRoster(batchId: string): Promise<void> {
+  if (adminCourses.rosterBatchId === batchId) {
+    adminCourses = { ...adminCourses, rosterBatchId: null, roster: [] };
+    renderApp();
+    return;
+  }
+  adminCourses = { ...adminCourses, rosterBatchId: batchId, rosterLoading: true, roster: [] };
+  renderApp();
+  try {
+    const roster = await adminApiRequest<EnrollmentView[]>(
+      `/api/admin/courses/batches/${encodeURIComponent(batchId)}/enrollments`,
+    );
+    adminCourses = { ...adminCourses, rosterLoading: false, roster: roster ?? [] };
+  } catch (error) {
+    adminCourses = { ...adminCourses, rosterLoading: false };
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+  }
+  renderApp();
+}
+
+async function adminDecideEnrollment(sub: string, batchId: string, decision: 'approve' | 'reject'): Promise<void> {
+  try {
+    await adminApiRequest(
+      `/api/admin/courses/enrollments/${encodeURIComponent(sub)}/${encodeURIComponent(batchId)}/${decision}`,
+      { method: 'POST' },
+    );
+    setAdminCourseNotice(`Enrollment ${decision === 'approve' ? 'approved' : 'rejected'}.`, 'success');
+    // Refresh the roster and the institute (seat counts changed).
+    const roster = await adminApiRequest<EnrollmentView[]>(
+      `/api/admin/courses/batches/${encodeURIComponent(batchId)}/enrollments`,
+    );
+    adminCourses = { ...adminCourses, roster: roster ?? [] };
+    await adminReloadInstitute();
+    void loadAdminEnrollmentStats(true);
+  } catch (error) {
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+    renderApp();
+  }
+}
+
+// ----- All enrollment requests (global queue) ------------------------------
+async function loadAdminEnrollments(force = false): Promise<void> {
+  if (adminEnrollments.loading) {
+    return;
+  }
+  if (adminEnrollments.loaded && !force) {
+    return;
+  }
+  adminEnrollments = { ...adminEnrollments, loading: true, error: '' };
+  renderApp();
+  try {
+    const query = adminEnrollments.filter ? `?status=${encodeURIComponent(adminEnrollments.filter)}` : '';
+    const items = await adminApiRequest<EnrollmentView[]>(`/api/admin/courses/enrollments${query}`);
+    adminEnrollments = { ...adminEnrollments, loaded: true, loading: false, items: items ?? [] };
+  } catch (error) {
+    adminEnrollments = { ...adminEnrollments, loading: false, error: normalizeError(error).message };
+  }
+  renderApp();
+}
+
+async function loadAdminEnrollmentStats(force = false): Promise<void> {
+  if (adminEnrollmentStats.loading) {
+    return;
+  }
+  if (adminEnrollmentStats.loaded && !force) {
+    return;
+  }
+  adminEnrollmentStats = { ...adminEnrollmentStats, loading: true };
+  try {
+    const stats = await adminApiRequest<{ pending?: number; confirmed?: number }>(
+      '/api/admin/courses/enrollments/stats',
+    );
+    adminEnrollmentStats = {
+      loaded: true,
+      loading: false,
+      pending: stats.pending ?? 0,
+      confirmed: stats.confirmed ?? 0,
+    };
+    renderApp();
+  } catch {
+    adminEnrollmentStats = { ...adminEnrollmentStats, loading: false };
+    // Cards fall back to "—"; not worth surfacing an error on the dashboard.
+  }
+}
+
+function setAdminEnrollmentsFilter(status: string): void {
+  adminEnrollments = { ...adminEnrollments, filter: status, loaded: false };
+  void loadAdminEnrollments(true);
+}
+
+async function adminDecideGlobal(sub: string, batchId: string, decision: 'approve' | 'reject'): Promise<void> {
+  adminEnrollments = { ...adminEnrollments, busyKey: `${sub}:${batchId}`, notice: '' };
+  renderApp();
+  try {
+    await adminApiRequest(
+      `/api/admin/courses/enrollments/${encodeURIComponent(sub)}/${encodeURIComponent(batchId)}/${decision}`,
+      { method: 'POST' },
+    );
+    adminEnrollments = {
+      ...adminEnrollments,
+      busyKey: null,
+      notice: `Enrollment ${decision === 'approve' ? 'approved' : 'rejected'}.`,
+      noticeKind: 'success',
+    };
+    await loadAdminEnrollments(true);
+    void loadAdminEnrollmentStats(true);
+  } catch (error) {
+    adminEnrollments = {
+      ...adminEnrollments,
+      busyKey: null,
+      notice: normalizeError(error).message,
+      noticeKind: 'error',
+    };
+    renderApp();
+  }
+}
+
+function renderAdminEnrollmentsPanel(): string {
+  if (adminEnrollments.loading && !adminEnrollments.loaded) {
+    return `<div class="admin-panel"><p class="admin-empty">Loading enrollment requests…</p></div>`;
+  }
+  const notice = adminEnrollments.notice
+    ? `<p class="admin-alert admin-alert-${
+        adminEnrollments.noticeKind === 'error' ? 'error' : 'success'
+      }">${escapeHtml(adminEnrollments.notice)}</p>`
+    : '';
+  const error = adminEnrollments.error
+    ? `<p class="admin-alert admin-alert-error">${escapeHtml(adminEnrollments.error)}
+         <button type="button" class="admin-link" data-action="admin-enrollments-reload">Retry</button></p>`
+    : '';
+
+  const filters: [string, string][] = [
+    ['', 'All'],
+    ['PENDING', 'Pending'],
+    ['CONFIRMED', 'Confirmed'],
+    ['REJECTED', 'Rejected'],
+    ['CANCELLED', 'Cancelled'],
+  ];
+  const filterChips = filters
+    .map(
+      ([value, label]) =>
+        `<button type="button" class="admin-tab${adminEnrollments.filter === value ? ' is-active' : ''}"
+          data-action="admin-enrollments-filter" data-status="${value}">${label}</button>`,
+    )
+    .join('');
+
+  const pendingCount = adminEnrollments.items.filter((e) => (e.status ?? '').toUpperCase() === 'PENDING').length;
+
+  const rows = adminEnrollments.items
+    .map((e) => {
+      const status = (e.status ?? '').toUpperCase();
+      const busy = adminEnrollments.busyKey === `${e.sub ?? ''}:${e.batchId}`;
+      const actions =
+        status === 'PENDING'
+          ? `<button type="button" class="admin-link" data-action="admin-enrollments-approve"
+               data-sub="${escapeHtml(e.sub ?? '')}" data-batch-id="${escapeHtml(e.batchId)}" ${busy ? 'disabled' : ''}>Approve</button>
+             <button type="button" class="admin-link admin-link-danger" data-action="admin-enrollments-reject"
+               data-sub="${escapeHtml(e.sub ?? '')}" data-batch-id="${escapeHtml(e.batchId)}" ${busy ? 'disabled' : ''}>Reject</button>`
+          : '';
+      const requested = e.createdAt ? formatDateTime(e.createdAt) : '';
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(e.courseName ?? e.typeSlug ?? '')}</strong>
+            <small>${escapeHtml(e.instituteName ?? '')}${e.startDate ? ` · starts ${escapeHtml(e.startDate)}` : ''}</small>
+          </td>
+          <td class="admin-enr-user">${escapeHtml(e.sub ?? '')}</td>
+          <td>${courseStatusBadge(e.status)}</td>
+          <td class="admin-enr-date">${escapeHtml(requested)}</td>
+          <td class="admin-enr-actions">${actions}</td>
+        </tr>`;
+    })
+    .join('');
+
+  return `
+    <div class="admin-course-toolbar">
+      <div class="admin-tabs admin-subtabs">${filterChips}</div>
+      <span class="admin-generated">${adminEnrollments.items.length} shown · ${pendingCount} pending</span>
+    </div>
+    ${notice}
+    ${error}
+    <div class="admin-panel">
+      ${
+        adminEnrollments.items.length === 0
+          ? '<p class="admin-empty">No enrollment requests to show.</p>'
+          : `<div class="admin-table-wrap"><table class="admin-table admin-enr-table">
+              <thead><tr><th>Course</th><th>Seafarer</th><th>Status</th><th>Requested</th><th></th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table></div>`
+      }
+    </div>
+  `;
+}
+
+async function adminSaveCourseType(form: HTMLFormElement): Promise<void> {
+  const name = getFormValue(form, 'name');
+  const category = getFormValue(form, 'category');
+  if (!name) {
+    setAdminCourseNotice('Course name is required.', 'error');
+    renderApp();
+    return;
+  }
+  try {
+    await adminApiRequest('/api/admin/courses/course-types', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, category }),
+    });
+    setAdminCourseNotice('Course type added.', 'success');
+    await loadAdminCourses(true);
+  } catch (error) {
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+    renderApp();
+  }
+}
+
+async function adminDeleteCourseType(slug: string): Promise<void> {
+  if (!window.confirm('Delete this course type?')) {
+    return;
+  }
+  try {
+    await adminCourseVoid(`/api/admin/courses/course-types/${encodeURIComponent(slug)}`, { method: 'DELETE' });
+    setAdminCourseNotice('Course type deleted.', 'success');
+    await loadAdminCourses(true);
+  } catch (error) {
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+    renderApp();
+  }
+}
+
+async function adminSaveInstitute(form: HTMLFormElement): Promise<void> {
+  const name = getFormValue(form, 'name');
+  if (!name) {
+    setAdminCourseNotice('Institute name is required.', 'error');
+    renderApp();
+    return;
+  }
+  try {
+    await adminApiRequest('/api/admin/courses/institutes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        city: getFormValue(form, 'city'),
+        state: getFormValue(form, 'state'),
+        dgsCode: getFormValue(form, 'dgsCode'),
+        approvalStatus: 'Approved',
+        active: true,
+      }),
+    });
+    setAdminCourseNotice('Institute added.', 'success');
+    await loadAdminCourses(true);
+  } catch (error) {
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+    renderApp();
+  }
+}
+
+async function adminSaveOffering(form: HTMLFormElement): Promise<void> {
+  const instituteId = form.dataset.instituteId ?? '';
+  const typeSlug = getFormValue(form, 'typeSlug');
+  if (!instituteId || !typeSlug) {
+    return;
+  }
+  try {
+    await adminApiRequest(
+      `/api/admin/courses/institutes/${encodeURIComponent(instituteId)}/offerings/${encodeURIComponent(typeSlug)}`,
+      { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+    );
+    setAdminCourseNotice('Course offering added.', 'success');
+    await adminReloadInstitute();
+  } catch (error) {
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+    renderApp();
+  }
+}
+
+async function adminDeleteOffering(instituteId: string, typeSlug: string): Promise<void> {
+  if (!window.confirm('Remove this course (and its batches) from the institute?')) {
+    return;
+  }
+  try {
+    await adminCourseVoid(
+      `/api/admin/courses/institutes/${encodeURIComponent(instituteId)}/offerings/${encodeURIComponent(typeSlug)}`,
+      { method: 'DELETE' },
+    );
+    setAdminCourseNotice('Offering removed.', 'success');
+    await adminReloadInstitute();
+  } catch (error) {
+    setAdminCourseNotice(normalizeError(error).message, 'error');
+    renderApp();
+  }
+}
+
+function renderAdminCoursesPanel(): string {
+  if (adminCourses.loading && !adminCourses.loaded) {
+    return `<div class="admin-panel"><p class="admin-empty">Loading courses…</p></div>`;
+  }
+  const notice = adminCourses.notice
+    ? `<p class="admin-alert admin-alert-${
+        adminCourses.noticeKind === 'error' ? 'error' : 'success'
+      }">${escapeHtml(adminCourses.notice)}</p>`
+    : '';
+  const error = adminCourses.error
+    ? `<p class="admin-alert admin-alert-error">${escapeHtml(adminCourses.error)}
+         <button type="button" class="admin-link" data-action="admin-course-reload">Retry</button></p>`
+    : '';
+
+  return `
+    <div class="admin-course-toolbar">
+      <button type="button" class="admin-button admin-button-primary" data-action="admin-course-import" ${
+        adminCourses.importing ? 'disabled' : ''
+      }>${adminCourses.importing ? 'Importing…' : 'Import DGS institutes + catalogue'}</button>
+      <span class="admin-generated">${adminCourses.institutes.length} institutes · ${
+        adminCourses.courseTypes.length
+      } course types</span>
+    </div>
+    ${notice}
+    ${error}
+    <div class="admin-body">
+      <section class="admin-panel">
+        <div class="admin-panel-head">
+          <h2>Institutes</h2>
+          <input class="admin-search" id="admin-course-institute-search" type="search"
+            placeholder="Search institutes…" autocomplete="off" />
+        </div>
+        ${renderAdminInstituteList()}
+        ${renderAdminCourseTypes()}
+      </section>
+      <section class="admin-panel">
+        ${renderAdminInstituteDetail()}
+      </section>
+    </div>
+  `;
+}
+
+function renderAdminInstituteList(): string {
+  const rows = adminCourses.institutes
+    .map((inst) => {
+      const selected = adminCourses.selectedInstitute?.id === inst.id ? ' is-selected' : '';
+      const search = `${inst.name} ${inst.city ?? ''} ${inst.state ?? ''}`.toLowerCase();
+      const activeFlag =
+        (inst as InstituteSummary & { active?: boolean }).active === false
+          ? '<span class="admin-course-inactive">inactive</span>'
+          : '';
+      return `
+      <button type="button" class="admin-course-inst-row${selected}" data-action="admin-course-open-institute"
+        data-institute-id="${escapeHtml(inst.id)}" data-search="${escapeHtml(search)}">
+        <span>${escapeHtml(inst.name)} ${activeFlag}</span>
+        <small>${escapeHtml([inst.city, inst.state].filter(Boolean).join(', '))}</small>
+      </button>`;
+    })
+    .join('');
+  return `<div class="admin-course-inst-list">${
+    rows || '<p class="admin-empty">No institutes yet. Use “Import” above to load the DGS list.</p>'
+  }</div>`;
+}
+
+function renderAdminCourseTypes(): string {
+  const rows = adminCourses.courseTypes
+    .map(
+      (type) => `
+      <li>
+        <span>${escapeHtml(type.name)} <small>${escapeHtml(type.category ?? '')}</small></span>
+        <button type="button" class="admin-link admin-link-danger" data-action="admin-course-delete-type"
+          data-slug="${escapeHtml(type.slug)}">Delete</button>
+      </li>`,
+    )
+    .join('');
+  return `
+    <details class="admin-course-types">
+      <summary>Course catalogue (${adminCourses.courseTypes.length})</summary>
+      <ul class="admin-course-type-list">${rows}</ul>
+      <form class="admin-course-inline-form" id="admin-course-type-form">
+        <input name="name" type="text" placeholder="New course name" required />
+        <select name="category">
+          <option value="PRE_SEA">Pre-Sea</option>
+          <option value="STCW_MODULAR">STCW Modular</option>
+          <option value="COMPETENCY">Competency</option>
+          <option value="REFRESHER">Refresher</option>
+          <option value="TANKER">Tanker</option>
+          <option value="SIMULATOR">Simulator</option>
+          <option value="OTHER">Other</option>
+        </select>
+        <button type="submit" class="admin-button admin-button-ghost">Add</button>
+      </form>
+      <form class="admin-course-inline-form" id="admin-course-institute-form">
+        <input name="name" type="text" placeholder="New institute name" required />
+        <input name="city" type="text" placeholder="City" />
+        <input name="state" type="text" placeholder="State" />
+        <button type="submit" class="admin-button admin-button-ghost">Add institute</button>
+      </form>
+    </details>
+  `;
+}
+
+function renderAdminInstituteDetail(): string {
+  if (adminCourses.detailLoading) {
+    return `<p class="admin-empty">Loading institute…</p>`;
+  }
+  const inst = adminCourses.selectedInstitute;
+  if (!inst) {
+    return `<p class="admin-empty">Select an institute to manage its courses, batches and enrollment requests.</p>`;
+  }
+  const active = (inst as InstituteSummary & { active?: boolean }).active !== false;
+  const offerings = inst.offerings ?? [];
+  const batches = inst.batches ?? [];
+
+  const offeredSlugs = new Set(offerings.map((o) => o.typeSlug));
+  const availableTypes = adminCourses.courseTypes.filter((t) => !offeredSlugs.has(t.slug));
+
+  const offeringChips = offerings
+    .map(
+      (o) => `
+      <span class="admin-course-offering">
+        ${escapeHtml(o.courseName ?? o.typeSlug)}
+        <button type="button" class="admin-course-x" title="Remove" data-action="admin-course-delete-offering"
+          data-institute-id="${escapeHtml(inst.id)}" data-type-slug="${escapeHtml(o.typeSlug)}">×</button>
+      </span>`,
+    )
+    .join('');
+
+  const batchRows = batches.map((batch) => renderAdminBatchRow(inst.id, batch)).join('');
+
+  const courseOptions = offerings
+    .map((o) => `<option value="${escapeHtml(o.typeSlug)}">${escapeHtml(o.courseName ?? o.typeSlug)}</option>`)
+    .join('');
+  const addOfferingOptions = availableTypes
+    .map((t) => `<option value="${escapeHtml(t.slug)}">${escapeHtml(t.name)}</option>`)
+    .join('');
+
+  return `
+    <div class="admin-course-detail-head">
+      <button type="button" class="admin-link" data-action="admin-course-close-institute">← Back</button>
+      <div>
+        <h2>${escapeHtml(inst.name)}</h2>
+        <small>${escapeHtml([inst.city, inst.state].filter(Boolean).join(', '))} · DGS ${escapeHtml(
+          inst.dgsCode ?? '—',
+        )}</small>
+      </div>
+      <button type="button" class="admin-button admin-button-ghost" data-action="admin-course-toggle-active"
+        data-institute-id="${escapeHtml(inst.id)}" data-active="${active ? 'false' : 'true'}">
+        ${active ? 'Disable (hide publicly)' : 'Enable'}
+      </button>
+    </div>
+
+    <h3 class="admin-course-subhead">Courses offered</h3>
+    <div class="admin-course-offerings">${offeringChips || '<span class="admin-empty">None yet.</span>'}</div>
+    ${
+      addOfferingOptions
+        ? `<form class="admin-course-inline-form" id="admin-course-offering-form" data-institute-id="${escapeHtml(
+            inst.id,
+          )}">
+             <select name="typeSlug">${addOfferingOptions}</select>
+             <button type="submit" class="admin-button admin-button-ghost">Add course</button>
+           </form>`
+        : ''
+    }
+
+    <h3 class="admin-course-subhead">Batches</h3>
+    <div class="admin-course-batches">${batchRows || '<p class="admin-empty">No batches yet.</p>'}</div>
+    ${
+      courseOptions
+        ? `<form class="admin-course-inline-form" id="admin-course-batch-form" data-institute-id="${escapeHtml(
+            inst.id,
+          )}">
+             <select name="typeSlug" required>${courseOptions}</select>
+             <input name="startDate" type="date" required />
+             <input name="totalSeats" type="number" min="1" placeholder="Seats" required />
+             <button type="submit" class="admin-button admin-button-ghost">Add batch</button>
+           </form>`
+        : '<p class="admin-empty">Add a course offering first, then create batches for it.</p>'
+    }
+  `;
+}
+
+function renderAdminBatchRow(instituteId: string, batch: BatchView): string {
+  const available = typeof batch.availableSeats === 'number' ? batch.availableSeats : 0;
+  const total = typeof batch.totalSeats === 'number' ? batch.totalSeats : 0;
+  const rosterOpen = adminCourses.rosterBatchId === batch.batchId;
+  const statusToggle = (batch.status ?? 'OPEN') === 'OPEN' ? 'CLOSED' : 'OPEN';
+
+  let rosterHtml = '';
+  if (rosterOpen) {
+    if (adminCourses.rosterLoading) {
+      rosterHtml = `<p class="admin-empty">Loading requests…</p>`;
+    } else if (adminCourses.roster.length === 0) {
+      rosterHtml = `<p class="admin-empty">No enrollment requests for this batch.</p>`;
+    } else {
+      rosterHtml = adminCourses.roster
+        .map((entry) => {
+          const status = (entry.status ?? '').toUpperCase();
+          const actions =
+            status === 'PENDING'
+              ? `<button type="button" class="admin-link" data-action="admin-course-approve"
+                   data-sub="${escapeHtml(entry.sub ?? '')}" data-batch-id="${escapeHtml(batch.batchId)}">Approve</button>
+                 <button type="button" class="admin-link admin-link-danger" data-action="admin-course-reject"
+                   data-sub="${escapeHtml(entry.sub ?? '')}" data-batch-id="${escapeHtml(batch.batchId)}">Reject</button>`
+              : '';
+          return `<div class="admin-course-roster-row">
+              <span>${escapeHtml(entry.sub ?? '')}</span>
+              ${courseStatusBadge(entry.status)}
+              <span class="admin-course-roster-actions">${actions}</span>
+            </div>`;
+        })
+        .join('');
+    }
+  }
+
+  return `
+    <div class="admin-course-batch">
+      <div class="admin-course-batch-main">
+        <strong>${escapeHtml(batch.courseName ?? batch.typeSlug)}</strong>
+        <small>Starts ${escapeHtml(batch.startDate ?? '—')} · ${available}/${total} seats · ${escapeHtml(
+          batch.status ?? 'OPEN',
+        )}</small>
+      </div>
+      <div class="admin-course-batch-actions">
+        <button type="button" class="admin-link" data-action="admin-course-roster"
+          data-batch-id="${escapeHtml(batch.batchId)}">${rosterOpen ? 'Hide requests' : 'Requests'}</button>
+        <button type="button" class="admin-link" data-action="admin-course-batch-status"
+          data-institute-id="${escapeHtml(instituteId)}" data-type-slug="${escapeHtml(batch.typeSlug)}"
+          data-batch-id="${escapeHtml(batch.batchId)}" data-status="${statusToggle}">
+          ${statusToggle === 'CLOSED' ? 'Close' : 'Open'}
+        </button>
+        <button type="button" class="admin-link admin-link-danger" data-action="admin-course-delete-batch"
+          data-institute-id="${escapeHtml(instituteId)}" data-type-slug="${escapeHtml(batch.typeSlug)}"
+          data-batch-id="${escapeHtml(batch.batchId)}">Delete</button>
+      </div>
+      ${rosterOpen ? `<div class="admin-course-roster">${rosterHtml}</div>` : ''}
+    </div>
+  `;
 }
 
 // Re-validate a password restored from sessionStorage on page load. Runs once
@@ -2125,14 +3503,19 @@ function renderAdminDashboard(): string {
   const stats = adminState.data?.stats;
   const generatedAt = adminState.data?.generatedAt ?? null;
 
-  const statCards = stats
-    ? [
-        renderStatCard('Registered users', String(stats.totalUsers), 'with a profile or upload'),
-        renderStatCard('Uploaded files', String(stats.totalFiles), formatBytes(stats.totalStorageBytes) + ' stored'),
-        renderStatCard('Active (7 days)', String(stats.activeLast7Days), 'users with recent activity'),
-        renderStatCard('New files (7 days)', String(stats.newFilesLast7Days), 'uploaded this week'),
-      ].join('')
-    : '';
+  const enrolled = adminEnrollmentStats.loaded;
+  const statCards = [
+    ...(stats
+      ? [
+          renderStatCard('Registered users', String(stats.totalUsers), 'with a profile or upload'),
+          renderStatCard('Uploaded files', String(stats.totalFiles), formatBytes(stats.totalStorageBytes) + ' stored'),
+          renderStatCard('Active (7 days)', String(stats.activeLast7Days), 'users with recent activity'),
+          renderStatCard('New files (7 days)', String(stats.newFilesLast7Days), 'uploaded this week'),
+        ]
+      : []),
+    renderStatCard('Pending requests', enrolled ? String(adminEnrollmentStats.pending) : '—', 'enrollments awaiting approval'),
+    renderStatCard('Confirmed enrollments', enrolled ? String(adminEnrollmentStats.confirmed) : '—', 'seats booked'),
+  ].join('');
 
   const globalError = adminState.error
     ? `<p class="admin-alert admin-alert-error">${escapeHtml(adminState.error)}
@@ -2161,7 +3544,21 @@ function renderAdminDashboard(): string {
       <section class="admin-stats">${statCards}</section>
       ${globalError}
 
-      <div class="admin-body">
+      <nav class="admin-tabs">
+        <button type="button" class="admin-tab${adminTab === 'users' ? ' is-active' : ''}"
+          data-action="admin-tab" data-tab="users">Users</button>
+        <button type="button" class="admin-tab${adminTab === 'courses' ? ' is-active' : ''}"
+          data-action="admin-tab" data-tab="courses">Courses</button>
+        <button type="button" class="admin-tab${adminTab === 'enrollments' ? ' is-active' : ''}"
+          data-action="admin-tab" data-tab="enrollments">Enrollment requests</button>
+      </nav>
+
+      ${
+        adminTab === 'enrollments'
+          ? renderAdminEnrollmentsPanel()
+          : adminTab === 'courses'
+          ? renderAdminCoursesPanel()
+          : `<div class="admin-body">
         <section class="admin-panel admin-users-panel">
           <div class="admin-panel-head">
             <h2>Registered users</h2>
@@ -2179,7 +3576,8 @@ function renderAdminDashboard(): string {
         <section class="admin-panel admin-detail-panel">
           ${renderAdminDetail()}
         </section>
-      </div>
+      </div>`
+      }
     </div>
   `;
 }
@@ -2424,6 +3822,32 @@ function bindAdminPage(): void {
       const query = searchInput.value.trim().toLowerCase();
       adminState.search = searchInput.value;
       document.querySelectorAll<HTMLElement>('#admin-user-rows .admin-user-row').forEach((row) => {
+        const haystack = row.dataset.search ?? '';
+        row.hidden = Boolean(query) && !haystack.includes(query);
+      });
+    });
+  }
+
+  // Enrollment counts back the dashboard stat cards (shown on every tab).
+  if (adminState.authed) {
+    void loadAdminEnrollmentStats();
+  }
+
+  // Load the Courses catalogue the first time the Courses tab is shown.
+  if (adminState.authed && adminTab === 'courses') {
+    void loadAdminCourses();
+  }
+
+  // Load the global enrollment queue the first time the Enrollments tab is shown.
+  if (adminState.authed && adminTab === 'enrollments') {
+    void loadAdminEnrollments();
+  }
+
+  const instSearch = document.querySelector<HTMLInputElement>('#admin-course-institute-search');
+  if (instSearch) {
+    instSearch.addEventListener('input', () => {
+      const query = instSearch.value.trim().toLowerCase();
+      document.querySelectorAll<HTMLElement>('.admin-course-inst-row').forEach((row) => {
         const haystack = row.dataset.search ?? '';
         row.hidden = Boolean(query) && !haystack.includes(query);
       });
@@ -3327,6 +4751,18 @@ function renderPrivateSubPageBody(
     return renderCertificateCategory(session, sub.slug);
   }
 
+  if (step.path === '/courses' && sub.slug === 'find') {
+    return renderCoursesFind(session);
+  }
+
+  if (step.path === '/courses' && sub.slug === 'institutes') {
+    return renderCoursesInstitutes(session);
+  }
+
+  if (step.path === '/courses' && sub.slug === 'enrollments') {
+    return renderCoursesEnrollments(session);
+  }
+
   return `
     <div class="portal-placeholder" aria-label="${escapeHtml(sub.label)} workspace">
       <p class="portal-placeholder-title">This section is coming soon.</p>
@@ -4187,6 +5623,23 @@ function bindCurrentPage(session: AuthSession | null): void {
     void loadCertificatesFromApi(session);
   }
 
+  // Load the courses catalogue + enrollments once when entering any Courses page.
+  if (session && getCurrentPath().startsWith('/courses')) {
+    void loadCoursesFromApi(session);
+  }
+
+  // Client-side filter for the institutes list.
+  const instituteSearch = document.querySelector<HTMLInputElement>('#course-institute-search');
+  if (instituteSearch) {
+    instituteSearch.addEventListener('input', () => {
+      const query = instituteSearch.value.trim().toLowerCase();
+      document.querySelectorAll<HTMLElement>('.course-institute-row').forEach((row) => {
+        const searchable = row.dataset.search ?? '';
+        row.hidden = Boolean(query) && !searchable.includes(query);
+      });
+    });
+  }
+
   // Load sharing data + draw any QR codes on the "Share documents" page.
   if (session && getCurrentPath().startsWith('/certificates/sharing')) {
     void loadSharingFromApi(session);
@@ -4252,6 +5705,44 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
   if (form.id === 'admin-login-form') {
     event.preventDefault();
     await handleAdminLogin(form);
+    return;
+  }
+
+  if (form.id === 'course-search-form') {
+    event.preventDefault();
+    const session = getSession();
+    if (session) {
+      await searchCourseBatches(
+        session,
+        getFormValue(form, 'course'),
+        getFormValue(form, 'from'),
+        getFormValue(form, 'to'),
+      );
+    }
+    return;
+  }
+
+  if (form.id === 'admin-course-type-form') {
+    event.preventDefault();
+    await adminSaveCourseType(form);
+    return;
+  }
+
+  if (form.id === 'admin-course-institute-form') {
+    event.preventDefault();
+    await adminSaveInstitute(form);
+    return;
+  }
+
+  if (form.id === 'admin-course-offering-form') {
+    event.preventDefault();
+    await adminSaveOffering(form);
+    return;
+  }
+
+  if (form.id === 'admin-course-batch-form') {
+    event.preventDefault();
+    await adminSaveBatch(form);
     return;
   }
 
@@ -5222,6 +6713,122 @@ function handleClick(event: MouseEvent): void {
 
   if (action === 'admin-refresh') {
     void refreshAdminUsers();
+    void loadAdminEnrollmentStats(true);
+    return;
+  }
+
+  if (action === 'admin-tab') {
+    const tab = actionElement.dataset.tab;
+    if (tab === 'users' || tab === 'courses' || tab === 'enrollments') {
+      adminTab = tab;
+      renderApp();
+    }
+    return;
+  }
+
+  if (action === 'admin-enrollments-reload') {
+    void loadAdminEnrollments(true);
+    return;
+  }
+
+  if (action === 'admin-enrollments-filter') {
+    setAdminEnrollmentsFilter(actionElement.getAttribute('data-status') ?? '');
+    return;
+  }
+
+  if (action === 'admin-enrollments-approve' || action === 'admin-enrollments-reject') {
+    const sub = actionElement.getAttribute('data-sub');
+    const batchId = actionElement.getAttribute('data-batch-id');
+    if (sub && batchId) {
+      void adminDecideGlobal(sub, batchId, action === 'admin-enrollments-approve' ? 'approve' : 'reject');
+    }
+    return;
+  }
+
+  if (action === 'admin-course-reload') {
+    void loadAdminCourses(true);
+    return;
+  }
+
+  if (action === 'admin-course-import') {
+    void adminImportSeed();
+    return;
+  }
+
+  if (action === 'admin-course-open-institute') {
+    const id = actionElement.getAttribute('data-institute-id');
+    if (id) {
+      void adminOpenInstitute(id);
+    }
+    return;
+  }
+
+  if (action === 'admin-course-close-institute') {
+    adminCloseInstitute();
+    return;
+  }
+
+  if (action === 'admin-course-toggle-active') {
+    const id = actionElement.getAttribute('data-institute-id');
+    const active = actionElement.getAttribute('data-active') === 'true';
+    if (id) {
+      void adminToggleInstituteActive(id, active);
+    }
+    return;
+  }
+
+  if (action === 'admin-course-delete-type') {
+    const slug = actionElement.getAttribute('data-slug');
+    if (slug) {
+      void adminDeleteCourseType(slug);
+    }
+    return;
+  }
+
+  if (action === 'admin-course-delete-offering') {
+    const id = actionElement.getAttribute('data-institute-id');
+    const slug = actionElement.getAttribute('data-type-slug');
+    if (id && slug) {
+      void adminDeleteOffering(id, slug);
+    }
+    return;
+  }
+
+  if (action === 'admin-course-roster') {
+    const batchId = actionElement.getAttribute('data-batch-id');
+    if (batchId) {
+      void adminToggleRoster(batchId);
+    }
+    return;
+  }
+
+  if (action === 'admin-course-batch-status') {
+    const id = actionElement.getAttribute('data-institute-id');
+    const slug = actionElement.getAttribute('data-type-slug');
+    const batchId = actionElement.getAttribute('data-batch-id');
+    const status = actionElement.getAttribute('data-status');
+    if (id && slug && batchId && status) {
+      void adminSetBatchStatus(id, slug, batchId, status);
+    }
+    return;
+  }
+
+  if (action === 'admin-course-delete-batch') {
+    const id = actionElement.getAttribute('data-institute-id');
+    const slug = actionElement.getAttribute('data-type-slug');
+    const batchId = actionElement.getAttribute('data-batch-id');
+    if (id && slug && batchId) {
+      void adminDeleteBatch(id, slug, batchId);
+    }
+    return;
+  }
+
+  if (action === 'admin-course-approve' || action === 'admin-course-reject') {
+    const sub = actionElement.getAttribute('data-sub');
+    const batchId = actionElement.getAttribute('data-batch-id');
+    if (sub && batchId) {
+      void adminDecideEnrollment(sub, batchId, action === 'admin-course-approve' ? 'approve' : 'reject');
+    }
     return;
   }
 
@@ -5298,6 +6905,57 @@ function handleClick(event: MouseEvent): void {
     if (session) {
       void loadCertificatesFromApi(session, true);
     }
+  }
+
+  if (action === 'retry-courses') {
+    const session = getSession();
+    if (session) {
+      void loadCoursesFromApi(session, true);
+    }
+    return;
+  }
+
+  if (action === 'course-open-institute') {
+    const session = getSession();
+    const instituteId = actionElement.getAttribute('data-institute-id');
+    if (session && instituteId) {
+      void openInstituteDetail(session, instituteId);
+    }
+    return;
+  }
+
+  if (action === 'course-open-course') {
+    const session = getSession();
+    const slug = actionElement.getAttribute('data-course-slug');
+    if (session && slug) {
+      void openCourseDetail(session, slug);
+    }
+    return;
+  }
+
+  if (action === 'course-back') {
+    coursesClearDetail();
+    return;
+  }
+
+  if (action === 'course-enroll') {
+    const session = getSession();
+    const instituteId = actionElement.getAttribute('data-institute-id');
+    const typeSlug = actionElement.getAttribute('data-type-slug');
+    const batchId = actionElement.getAttribute('data-batch-id');
+    if (session && instituteId && typeSlug && batchId) {
+      void enrollInBatch(session, instituteId, typeSlug, batchId);
+    }
+    return;
+  }
+
+  if (action === 'course-cancel-enrollment') {
+    const session = getSession();
+    const batchId = actionElement.getAttribute('data-batch-id');
+    if (session && batchId) {
+      void cancelEnrollment(session, batchId);
+    }
+    return;
   }
 
   if (action === 'retry-sharing') {

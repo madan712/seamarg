@@ -31,6 +31,24 @@ tasks.named('bootJar') {
 	archiveFileName = 'seamarg-backend.jar'
 }
 
+// Local-dev temp dir. Some sandboxed environments deny Java's default
+// java.io.tmpdir (/var/folders/... → "Operation not permitted"), which makes
+// Tomcat fail to start under `bootRun`/IntelliJ and breaks @SpringBootTest web
+// tests. Point every run/test JVM at a project-local, always-writable dir so it
+// works without any per-machine JAVA_TOOL_OPTIONS. Applies to bootRun, IntelliJ's
+// Gradle-delegated `main()` run (a JavaExec) and the test JVM; not bootJar, so
+// production is unaffected.
+def appTmpDir = layout.buildDirectory.dir('apptmp')
+
+tasks.withType(JavaExec).configureEach {
+	def dir = appTmpDir.get().asFile
+	doFirst { dir.mkdirs() }
+	systemProperty 'java.io.tmpdir', dir.absolutePath
+}
+
 tasks.named('test') {
 	useJUnitPlatform()
+	def dir = appTmpDir.get().asFile
+	doFirst { dir.mkdirs() }
+	systemProperty 'java.io.tmpdir', dir.absolutePath
 }

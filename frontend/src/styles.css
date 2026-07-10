@@ -4123,3 +4123,522 @@ p {
 .share-viewer-actions .button:hover {
   transform: none;
 }
+
+/* ------------------------------------------------------------------ */
+/* Courses (docs/courses-design.md) — browse / search / enroll         */
+/* ------------------------------------------------------------------ */
+.course-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.course-search-card {
+  padding: 18px;
+  border: 1px solid var(--line-dark);
+  border-radius: 10px;
+  background: rgba(6, 22, 32, 0.4);
+  margin-bottom: 20px;
+}
+
+.course-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.course-search-row .field {
+  flex: 1 1 180px;
+  min-width: 160px;
+}
+
+.course-search-actions {
+  flex: 0 0 auto;
+}
+
+.course-results {
+  margin-bottom: 26px;
+}
+
+.course-batch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.course-batch-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: rgba(6, 22, 32, 0.4);
+}
+
+.course-batch-main h4 {
+  margin: 0 0 4px;
+  color: var(--paper);
+  font-family: "Oswald", sans-serif;
+  font-size: 1rem;
+}
+
+.course-batch-sub {
+  margin: 0 0 6px;
+  color: var(--mist-light);
+  font-size: 0.82rem;
+}
+
+.course-batch-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0;
+  color: var(--mist);
+  font-size: 0.8rem;
+}
+
+.course-batch-action {
+  flex: 0 0 auto;
+}
+
+.course-enroll-btn {
+  white-space: nowrap;
+}
+
+.course-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--line-dark);
+  color: var(--mist-light);
+}
+
+.course-badge-pending {
+  color: var(--brass-light);
+  border-color: rgba(227, 185, 101, 0.5);
+  background: rgba(200, 149, 46, 0.12);
+}
+
+.course-badge-confirmed {
+  color: #8fd6a6;
+  border-color: rgba(143, 214, 166, 0.45);
+  background: rgba(143, 214, 166, 0.1);
+}
+
+.course-badge-rejected,
+.course-badge-cancelled,
+.course-badge-full {
+  color: #e39a8c;
+  border-color: rgba(189, 70, 48, 0.5);
+  background: rgba(189, 70, 48, 0.12);
+}
+
+.course-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.course-chip {
+  padding: 8px 14px;
+  border: 1px solid var(--line-dark);
+  border-radius: 999px;
+  background: rgba(6, 22, 32, 0.4);
+  color: var(--paper);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.course-chip:hover {
+  border-color: var(--brass);
+  color: var(--brass-light);
+}
+
+.course-catalog h3,
+.course-detail-section h3 {
+  color: var(--paper);
+  font-family: "Oswald", sans-serif;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 12px;
+}
+
+.course-detail-section {
+  margin-top: 24px;
+}
+
+.course-institute-search {
+  margin-bottom: 14px;
+}
+
+.course-institute-search input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: var(--surface-paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.course-institute-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.course-institute-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: rgba(6, 22, 32, 0.4);
+  color: var(--paper);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.course-institute-row:hover {
+  border-color: var(--brass);
+}
+
+.course-institute-name {
+  font-weight: 600;
+}
+
+.course-institute-loc {
+  color: var(--mist);
+  font-size: 0.82rem;
+}
+
+.course-back {
+  margin-bottom: 14px;
+}
+
+.course-detail-head h2 {
+  margin: 4px 0 8px;
+  color: var(--paper);
+  font-family: "Oswald", sans-serif;
+}
+
+.course-detail-desc {
+  margin: 0 0 6px;
+  color: var(--mist-light);
+  font-size: 0.9rem;
+}
+
+.course-detail-link {
+  color: var(--brass-light);
+  font-size: 0.85rem;
+}
+
+.course-enrollment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.course-enrollment-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: rgba(6, 22, 32, 0.4);
+}
+
+.course-enrollment-row h4 {
+  margin: 0 0 4px;
+  color: var(--paper);
+  font-family: "Oswald", sans-serif;
+  font-size: 1rem;
+}
+
+.course-enrollment-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .course-batch-card,
+  .course-enrollment-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin console — Courses management                                  */
+/* ------------------------------------------------------------------ */
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.admin-tab {
+  padding: 8px 18px;
+  border: 1px solid var(--line-dark);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mist-light);
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-tab.is-active {
+  border-color: var(--brass);
+  color: var(--brass-light);
+  background: rgba(200, 149, 46, 0.12);
+}
+
+.admin-course-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.admin-course-inst-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.admin-course-inst-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--paper);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-course-inst-row.is-selected,
+.admin-course-inst-row:hover {
+  border-color: var(--brass);
+}
+
+.admin-course-inst-row small {
+  color: var(--mist);
+}
+
+.admin-course-inactive {
+  color: var(--signal);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.admin-course-types {
+  margin-top: 16px;
+  border-top: 1px solid var(--line-dark);
+  padding-top: 12px;
+}
+
+.admin-course-types summary {
+  cursor: pointer;
+  color: var(--mist-light);
+}
+
+.admin-course-type-list {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-course-type-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-course-type-list small {
+  color: var(--mist);
+}
+
+.admin-course-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.admin-course-inline-form input,
+.admin-course-inline-form select {
+  padding: 8px 10px;
+  border: 1px solid var(--line-dark);
+  border-radius: 6px;
+  background: var(--surface-paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.admin-course-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.admin-course-detail-head h2 {
+  margin: 0;
+}
+
+.admin-course-detail-head small {
+  color: var(--mist);
+}
+
+.admin-course-subhead {
+  margin: 18px 0 8px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mist-light);
+}
+
+.admin-course-offerings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-course-offering {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-dark);
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+.admin-course-x {
+  border: none;
+  background: transparent;
+  color: var(--signal);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.admin-course-batches {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-course-batch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+}
+
+.admin-course-batch-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-course-batch-main small {
+  color: var(--mist);
+}
+
+.admin-course-batch-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.admin-course-roster {
+  flex: 1 1 100%;
+  margin-top: 8px;
+  border-top: 1px solid var(--line-dark);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-course-roster-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.admin-course-roster-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.admin-link-danger {
+  color: var(--signal);
+}
+
+/* Admin — global enrollment requests queue */
+.admin-subtabs {
+  margin: 0;
+  flex-wrap: wrap;
+}
+.admin-enr-table td {
+  vertical-align: middle;
+}
+.admin-enr-table td strong {
+  display: block;
+  color: var(--paper);
+}
+.admin-enr-table td small {
+  color: var(--mist);
+}
+.admin-enr-user {
+  font-size: 0.78rem;
+  color: var(--mist-light);
+  word-break: break-all;
+  max-width: 180px;
+}
+.admin-enr-date {
+  color: var(--mist);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.admin-enr-actions {
+  display: flex;
+  gap: 12px;
+  white-space: nowrap;
+}
