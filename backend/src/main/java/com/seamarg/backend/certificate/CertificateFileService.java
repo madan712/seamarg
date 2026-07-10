@@ -42,7 +42,7 @@ class CertificateFileService {
 		this.objectMapper = objectMapper;
 	}
 
-	FileUploadResult upload(String userId, MultipartFile file) {
+	FileUploadResult upload(String userId, String typeSlug, MultipartFile file) {
 		validate(file);
 		var fileId = UUID.randomUUID().toString();
 		var originalFilename = safeFilename(file.getOriginalFilename());
@@ -54,9 +54,13 @@ class CertificateFileService {
 			throw new IllegalArgumentException("Could not read the uploaded file.", exception);
 		}
 
-		var stored = documentStorage.store(userId, fileId, originalFilename, contentType, content);
+		// Name the stored file after the catalog slug (shared/certificates.ts) so a
+		// certificate's file is identifiable by its type rather than the raw camera
+		// filename. The original extension is preserved for content-type/download.
+		var storedFilename = slugFilename(typeSlug, originalFilename);
+		var stored = documentStorage.store(userId, fileId, storedFilename, contentType, content);
 		var extraction = extractor.analyze(originalFilename, contentType, content);
-		var metadata = new FileMetadata(stored.bucketName(), stored.objectKey(), originalFilename, contentType,
+		var metadata = new FileMetadata(stored.bucketName(), stored.objectKey(), storedFilename, contentType,
 			content.length);
 		return new FileUploadResult(extraction, metadata);
 	}
@@ -125,6 +129,25 @@ class CertificateFileService {
 		var lastSlash = Math.max(filename.lastIndexOf('/'), filename.lastIndexOf('\\'));
 		var basename = lastSlash >= 0 ? filename.substring(lastSlash + 1) : filename;
 		return StringUtils.hasText(basename) ? basename : "document";
+	}
+
+	/** Builds "&lt;slug&gt;.&lt;ext&gt;" from the certificate type slug, keeping the original extension. */
+	private static String slugFilename(String typeSlug, String originalFilename) {
+		var slug = StringUtils.hasText(typeSlug) ? typeSlug.trim() : "document";
+		var extension = fileExtension(originalFilename);
+		return extension.isEmpty() ? slug : slug + "." + extension;
+	}
+
+	private static String fileExtension(String filename) {
+		if (!StringUtils.hasText(filename)) {
+			return "";
+		}
+		var dot = filename.lastIndexOf('.');
+		if (dot < 0 || dot == filename.length() - 1) {
+			return "";
+		}
+		var extension = filename.substring(dot + 1);
+		return extension.matches("[A-Za-z0-9]{1,10}") ? extension.toLowerCase(Locale.ENGLISH) : "";
 	}
 
 	record FileMetadata(String bucketName, String objectKey, String originalFilename, String contentType,

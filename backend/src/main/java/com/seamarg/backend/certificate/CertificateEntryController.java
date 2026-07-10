@@ -58,7 +58,7 @@ class CertificateEntryController {
 			@RequestParam("file") MultipartFile file, JwtAuthenticationToken authentication) {
 		CertificateCategory.fromSlug(category)
 			.orElseThrow(() -> new IllegalArgumentException("Unknown certificate category: " + category));
-		return certificateFileService.upload(userId(authentication), file);
+		return certificateFileService.upload(userId(authentication), type, file);
 	}
 
 	@GetMapping("/{category}/{type}/download-url")
