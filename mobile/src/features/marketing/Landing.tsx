@@ -32,38 +32,38 @@ const FEATURES: {
   chips: string[];
 }[] = [
   {
-    tag: 'Feature 01 — The Sea Wallet',
+    tag: 'The Sea Wallet',
     icon: 'wallet-outline',
-    title: 'Every document. One folder. Zero surprises.',
-    body: 'A digital wallet holds every certificate, endorsement and license you carry. Seamarg watches expiry dates around the clock and alerts you on WhatsApp at 90, 60 and 30 days out — no certificate ever sneaks up on you.',
+    title: 'Every document. One folder.',
+    body: 'All your certificates in one wallet, with WhatsApp alerts at 90, 60 and 30 days before expiry.',
     chips: ['STCW', "Seaman's Book", 'Medical', 'CDC'],
   },
   {
-    tag: 'Feature 02 — Course Booking',
+    tag: 'Course Booking',
     icon: 'boat-outline',
-    title: 'Find your course. Or let us book it for you.',
-    body: "Tell us the certificate you need. We'll surface the nearest approved institute, show live batch availability, and — if you'd rather not deal with the paperwork — book your seat for you.",
+    title: 'Find your course — or let us book it.',
+    body: 'The nearest approved institute, live batch availability, and booking handled for you.',
     chips: ['Fire Fighting', 'STCW Refresher', 'GMDSS', 'PSCRB'],
   },
   {
-    tag: 'Feature 03 — Crew ID',
+    tag: 'Crew ID',
     icon: 'qr-code-outline',
-    title: 'One scan. Every document, instantly.',
-    body: 'Your Seamarg profile carries a unique barcode. Walk into any institute or shipping company and one scan gives them secure, verified access to exactly the documents they asked for — no folders, no photocopies.',
+    title: 'One scan. Every document.',
+    body: 'A unique barcode gives institutes and companies secure access to exactly the documents you approve.',
     chips: ['Instant verification', 'No paper copies', 'You control access'],
   },
   {
-    tag: 'Feature 04 — Document Renewals',
+    tag: 'Document Renewals',
     icon: 'refresh-outline',
     title: 'We renew it. You stay at sea.',
-    body: 'Beyond your passport, Seamarg handles renewal of every DG Shipping document on your record — applications, follow-ups, collection. You get a WhatsApp message when it is done, not a stack of forms to chase.',
+    body: 'We handle every DG Shipping renewal — applications, follow-ups, collection — and ping you when it’s done.',
     chips: ['COC / COE', "Seaman's Book", 'Medical Certificate', 'CDC'],
   },
   {
-    tag: 'Feature 05 — DG Shipping Updates',
+    tag: 'DG Shipping Updates',
     icon: 'megaphone-outline',
-    title: "New rules don't catch you off guard.",
-    body: 'Circulars, compliance changes, certification updates — the moment DG Shipping issues something new it lands in plain language in your wallet and on WhatsApp, so you always sail compliant.',
+    title: 'New rules never catch you off guard.',
+    body: 'Circulars and compliance changes land in your wallet and on WhatsApp in plain language.',
     chips: [],
   },
 ];
@@ -104,8 +104,7 @@ export function Landing() {
           One <Text style={styles.accentWord}>crew</Text>.{'\n'}Every shore.
         </Title>
         <Serif style={styles.lede}>
-          Seamarg keeps watch over your documents, courses, compliance and career — so the only thing
-          you focus on is the voyage. Family on board. Family on shore.
+          We watch your documents, courses and compliance — so you only watch the voyage.
         </Serif>
 
         <View style={styles.heroActions}>
@@ -155,9 +154,8 @@ export function Landing() {
         </Eyebrow>
         <Heading style={styles.communityTitle}>We leave no one on the dock.</Heading>
         <Serif style={styles.communityCopy}>
-          Every seafarer carries the same life — months at sea, families on shore, the same documents,
-          the same deadlines. Seamarg exists because that life deserves a crew that has your back on
-          land, the way your shipmates have it on board.
+          Months at sea, families on shore, the same deadlines. Seamarg has your back on land, the way
+          your shipmates do on board.
         </Serif>
 
         <View style={styles.crewGrid}>
@@ -167,8 +165,8 @@ export function Landing() {
         </View>
 
         <Text style={styles.quote}>
-          “On board, we're family because we have to be. Seamarg made sure we're family on shore too —
-          someone watching the dates, the rules, the renewals, while we watch the sea.”
+          “Seamarg made sure we’re family on shore too — someone watching the dates and renewals while
+          we watch the sea.”
         </Text>
         <Muted style={styles.cite}>— A Seamarg seafarer, between contracts</Muted>
       </GradientSurface>
@@ -177,7 +175,7 @@ export function Landing() {
       <View style={styles.ctaBand}>
         <Heading style={styles.ctaTitle}>Your watch on shore starts today.</Heading>
         <Serif style={styles.ctaCopy}>
-          Open your Sea Wallet, get your Crew ID, and let Seamarg stand the next watch on your documents.
+          Open your Sea Wallet and let Seamarg stand the next watch on your documents.
         </Serif>
         <Button title="Create my Sea Wallet — Free" onPress={() => router.push('/sign-up')} />
         <Muted style={styles.footNote}>© 2026 Seamarg. One crew, every shore.</Muted>
